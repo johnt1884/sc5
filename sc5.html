@@ -19,6 +19,7 @@
             --playlist-sc-color: #ff00ff;
             --selected-cat-color: #ff0000;
             --edit-cuts-color: #ff8c00;
+            --played-video-color: #4b0082;
         }
         html, body {
             height: 100%;
@@ -752,6 +753,10 @@
                                 <label for="edit-cuts-color-picker">Edit Button (with cuts)</label>
                                 <input type="color" id="edit-cuts-color-picker" value="#ff8c00">
                             </div>
+                            <div class="options-row">
+                                <label for="played-video-color-picker">Played Video Toolbar</label>
+                                <input type="color" id="played-video-color-picker" value="#4b0082">
+                            </div>
                             <button id="revert-defaults-btn" style="width: 100%; text-align: center; border-top: 1px solid #ccc; font-weight: bold;">Revert to Default Colors</button>
                         </div>
                     </div>
@@ -869,7 +874,8 @@
                             <button id="editor-markEndBtn" class="bar-button" style="border-color:#43a047">Mark End</button>
                             <button id="editor-flipBtn" class="bar-button">Flip H</button>
                             <button id="editor-cutSegmentBtn" class="bar-button" style="background:#d32f2f;color:white" disabled>Cut Segment</button>
-                            <button id="editor-deleteEditThumbsBtn" class="bar-button" style="border-color:#f44336">Delete Edit Thumbnails</button>
+                            <button id="editor-cropBtn" class="bar-button" style="border-color:#43a047">Crop</button>
+                            <button id="editor-deleteEditThumbsBtn" class="bar-button" style="border-color:#f44336">Delete Thumbnails</button>
                             <button id="editor-commitBtn" class="editor-greenBtn">Commit</button>
                         </div>
                         <div class="editor-control-group" style="justify-content:flex-end">
@@ -962,6 +968,7 @@
         const editorFileInfo = document.getElementById('editor-fileInfo');
         const editorFlipBtn = document.getElementById('editor-flipBtn');
         const editorDeleteEditThumbsBtn = document.getElementById('editor-deleteEditThumbsBtn');
+        const editorCropBtn = document.getElementById('editor-cropBtn');
         const editorResetBtn = document.getElementById('editor-resetBtn');
         const editorDeleteFrameBtn = document.getElementById('editor-deleteFrameBtn');
         let selectedVideoKey = null;
@@ -1008,6 +1015,8 @@
         let editorCurrentAppliedRotation = 0;
         let editorCurrentAppliedFlip = false;
         let editorDeleteEditThumbsFlag = false;
+        let editorCurrentCrop = null;
+        let currentlyPlayingRow = null;
 
         let videoCategories = new Map(); // Key: projectPath + '|' + videoName, Value: Set of category names
         let editModeRotatedVideos = new Map(); // Key: projectPath + '|' + videoName, Value: true
@@ -1615,6 +1624,7 @@
                 editorCurrentAppliedFlip = selection ? !!selection.editFlipped : false;
             }
             editorDeleteEditThumbsFlag = selection ? !!selection.deleteEditThumbnails : false;
+            editorCurrentCrop = selection ? (selection.crop || null) : null;
             
             if (editorFlipBtn) {
                 editorFlipBtn.classList.toggle('active', editorCurrentAppliedFlip);
@@ -1624,6 +1634,12 @@
             if (editorDeleteEditThumbsBtn) {
                 editorDeleteEditThumbsBtn.classList.toggle('active', editorDeleteEditThumbsFlag);
                 editorDeleteEditThumbsBtn.style.backgroundColor = editorDeleteEditThumbsFlag ? 'rgba(244, 67, 54, 0.3)' : '';
+            }
+
+            if (editorCropBtn) {
+                editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                editorCropBtn.title = editorCurrentCrop ? `Crop: ${editorCurrentCrop}` : 'Crop';
             }
             editorPendingCutStart = null;
             editorPendingCutEnd = null;
@@ -1783,6 +1799,19 @@
                 };
             }
 
+            if (editorCropBtn) {
+                editorCropBtn.onclick = () => {
+                    const current = editorCurrentCrop || "";
+                    const val = prompt("Enter crop (w:h:x:y):", current);
+                    if (val !== null) {
+                        editorCurrentCrop = val.trim() || null;
+                        editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                        editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                        editorCropBtn.title = editorCurrentCrop ? `Crop: ${editorCurrentCrop}` : 'Crop';
+                    }
+                };
+            }
+
             if (editorResetBtn) {
                 editorResetBtn.onclick = () => {
                     if (confirm('Clear all changes for this video?')) {
@@ -1794,6 +1823,11 @@
                         if (editorDeleteEditThumbsBtn) {
                             editorDeleteEditThumbsBtn.classList.remove('active');
                             editorDeleteEditThumbsBtn.style.backgroundColor = '';
+                        }
+                        editorCurrentCrop = null;
+                        if (editorCropBtn) {
+                            editorCropBtn.classList.remove('active');
+                            editorCropBtn.style.backgroundColor = '';
                         }
                         editorPendingCutStart = null;
                         editorPendingCutEnd = null;
@@ -1859,7 +1893,7 @@
                     finalEditRotation = uniqueMarkers[uniqueMarkers.length - 1].rotation.toString();
                 }
 
-                const editChanged = hasCuts || (editRotationType !== 'none') || (finalEditFlipped !== false);
+                const editChanged = hasCuts || (editRotationType !== 'none') || (finalEditFlipped !== false) || (editorCurrentCrop !== null);
 
                 if (!selection) {
                     selection = {
@@ -1880,6 +1914,7 @@
                 selection.editRotationType = editRotationType;
                 selection.isFullLength = isFullLength;
                 selection.editFlipped = finalEditFlipped;
+                selection.crop = editorCurrentCrop;
                 selection.deleteEditThumbnails = editorDeleteEditThumbsFlag;
                 selection.fps = editorEstimatedFPS;
                 
@@ -1965,7 +2000,8 @@
                 'date-text-color': document.getElementById('date-text-color-picker'),
                 'playlist-sc-color': document.getElementById('playlist-sc-color-picker'),
                 'selected-cat-color': document.getElementById('selected-cat-color-picker'),
-                'edit-cuts-color': document.getElementById('edit-cuts-color-picker')
+                'edit-cuts-color': document.getElementById('edit-cuts-color-picker'),
+                'played-video-color': document.getElementById('played-video-color-picker')
             };
 
             // Load saved colors
@@ -2008,7 +2044,8 @@
                         'date-text-color': '#01ffff',
                         'playlist-sc-color': '#ff00ff',
                         'selected-cat-color': '#ff0000',
-                        'edit-cuts-color': '#ff8c00'
+                        'edit-cuts-color': '#ff8c00',
+                        'played-video-color': '#4b0082'
                     };
                     Object.keys(defaults).forEach(id => {
                         const color = defaults[id];
@@ -2337,7 +2374,17 @@
             // Deprecated - row action bars handle their own active states
         }
 
-        function playVideo(file, rotation, flipped = false) {
+        function playVideo(file, rotation, flipped = false, rowDiv = null) {
+            if (currentlyPlayingRow) {
+                const oldBar = currentlyPlayingRow.querySelector('.row-action-bar');
+                if (oldBar) oldBar.style.backgroundColor = '';
+            }
+            if (rowDiv) {
+                currentlyPlayingRow = rowDiv;
+                const newBar = rowDiv.querySelector('.row-action-bar');
+                if (newBar) newBar.style.backgroundColor = 'var(--played-video-color)';
+            }
+
             if (currentVideoUrl) {
                 URL.revokeObjectURL(currentVideoUrl);
             }
@@ -2509,7 +2556,8 @@
                             }
                             if (selection.editFlipped) tooltipParts.push(`Edit Flip: ON`);
                             if (selection.cuts && selection.cuts.length > 0) tooltipParts.push(`Cuts: ${selection.cuts.length}`);
-                            if (selection.deleteEditThumbnails) tooltipParts.push(`Delete Edit Thumbs: YES`);
+                            if (selection.crop) tooltipParts.push(`Crop: ${selection.crop}`);
+                            if (selection.deleteEditThumbnails) tooltipParts.push(`Delete Thumbs: YES`);
                         } else if (selection && (selection.loadedEditRotated || selection.loadedHasCuts)) {
                             // Persistent flags from previous session
                             if (selection.loadedEditRotated) tooltipParts.push('Edit Mode: Rotated in previous session');
@@ -2872,12 +2920,22 @@
             
             const allThumbs = Array.from(document.querySelectorAll('.thumbnail[data-original-width]'));
             if (allThumbs.length > 0) {
-                // Use median width to be robust against both high-res and low-res outliers
-                const widths = allThumbs.map(t => parseFloat(t.dataset.originalWidth)).sort((a, b) => a - b);
-                const heights = allThumbs.map(t => parseFloat(t.dataset.originalHeight)).sort((a, b) => a - b);
+                const effectiveDims = allThumbs.map(t => {
+                    const w = parseFloat(t.dataset.originalWidth);
+                    const h = parseFloat(t.dataset.originalHeight);
+                    const isRot90 = t.classList.contains('rotate-90') || t.classList.contains('rotate-270');
+                    return { w: isRot90 ? h : w, h: isRot90 ? w : h };
+                });
+                const widths = effectiveDims.map(d => d.w).sort((a, b) => a - b);
+                const heights = effectiveDims.map(d => d.h).sort((a, b) => a - b);
                 standardWidth = widths[Math.floor(widths.length / 2)];
                 standardHeight = heights[Math.floor(heights.length / 2)];
-                referenceThumb = allThumbs.find(t => parseFloat(t.dataset.originalWidth) === standardWidth) || allThumbs[0];
+                referenceThumb = allThumbs.find(t => {
+                    const w = parseFloat(t.dataset.originalWidth);
+                    const h = parseFloat(t.dataset.originalHeight);
+                    const isRot90 = t.classList.contains('rotate-90') || t.classList.contains('rotate-270');
+                    return (isRot90 ? h : w) === standardWidth;
+                }) || allThumbs[0];
             }
 
             const calcAutoScale = (refW) => {
@@ -2893,8 +2951,7 @@
             };
 
             if (hScale === null || vScale === null) {
-                const isRot90 = referenceThumb ? (referenceThumb.classList.contains('rotate-90') || referenceThumb.classList.contains('rotate-270')) : false;
-                const auto = calcAutoScale(isRot90 ? standardHeight : standardWidth);
+                const auto = calcAutoScale(standardWidth);
                 if (hScale === null) hScale = auto;
                 if (vScale === null) vScale = auto;
             }
@@ -2908,33 +2965,34 @@
                         
                         let originalWidth = parseFloat(thumb.dataset.originalWidth);
                         let originalHeight = parseFloat(thumb.dataset.originalHeight);
+                        const isRotated90 = thumb.classList.contains('rotate-90') || thumb.classList.contains('rotate-270');
 
-                        if (originalWidth > standardWidth * 1.2 || originalHeight > standardHeight * 1.2) {
-                            const scale = Math.min(standardWidth / originalWidth, standardHeight / originalHeight);
-                            originalWidth *= scale;
-                            originalHeight *= scale;
+                        let effW = isRotated90 ? originalHeight : originalWidth;
+                        let effH = isRotated90 ? originalWidth : originalHeight;
+
+                        if (effW > standardWidth * 1.2 || effH > standardHeight * 1.2) {
+                            const scale = Math.min(standardWidth / effW, standardHeight / effH);
+                            effW *= scale;
+                            effH *= scale;
                         }
 
-                        const isRotated90 = thumb.classList.contains('rotate-90') || thumb.classList.contains('rotate-270');
-                        // Effective orientation after rotation
-                        const isCurrentlyVertical = isRotated90 ? (originalWidth > originalHeight) : (originalHeight > originalWidth);
+                        const isCurrentlyVertical = effH > effW;
                         const currentScale = isCurrentlyVertical ? vScale : hScale;
 
-                        const scaledWidth = originalWidth * currentScale;
-                        const scaledHeight = originalHeight * currentScale;
+                        const scaledWidth = effW * currentScale;
+                        const scaledHeight = effH * currentScale;
                         
-                        if (isRotated90) {
-                            wrapper.style.width = scaledHeight + 'px';
-                            wrapper.style.height = scaledWidth + 'px';
-                        } else {
-                            wrapper.style.width = scaledWidth + 'px';
-                            wrapper.style.height = scaledHeight + 'px';
-                        }
-                        
-                        thumb.style.width = scaledWidth + 'px';
-                        thumb.style.height = scaledHeight + 'px';
-                    });
+                        wrapper.style.width = scaledWidth + 'px';
+                        wrapper.style.height = scaledHeight + 'px';
 
+                        if (isRotated90) {
+                            thumb.style.width = scaledHeight + 'px';
+                            thumb.style.height = scaledWidth + 'px';
+                        } else {
+                            thumb.style.width = scaledWidth + 'px';
+                            thumb.style.height = scaledHeight + 'px';
+                        }
+                    });
                 }
             });
             updateRowNumbers();
@@ -3138,7 +3196,7 @@
                 '}',
                 '',
                 'function Process-Video {',
-                '    param([string]\$sourcePath, [string]\$targetPath, [array]\$cuts, [array]\$markers, [bool]\$flipped)',
+                '    param([string]\$sourcePath, [string]\$targetPath, [array]\$cuts, [array]\$markers, [bool]\$flipped, [string]\$crop)',
                 '    Write-Host "--- Processing Video: \$([System.IO.Path]::GetFileName(\$sourcePath)) ---" -ForegroundColor Cyan',
                 '    if (-not \$sourcePath -or -not (Test-Path -LiteralPath \$sourcePath)) { ',
                 '        Write-Host "Source path empty or invalid: \$sourcePath" -ForegroundColor Red',
@@ -3236,7 +3294,8 @@
                 '        elseif (\$seg.rotation -eq 180) { \$transpose = ",transpose=1,transpose=1" }',
                 '        elseif (\$seg.rotation -eq 270) { \$transpose = ",transpose=2" }',
                 '        \$flip = if (\$flipped) { ",hflip" } else { "" }',
-                '        \$vFilters += "[0:v]trim=start_frame=\$startF:end_frame=\$endF,setpts=PTS-STARTPTS\$transpose\$flip,scale=w=\$targetW:h=\$targetH:force_original_aspect_ratio=decrease,pad=\$targetW:\$targetH:(ow-iw)/2:(oh-ih)/2,setsar=1[\$vName]"',
+                '        \$cropFilter = if (\$crop) { ",crop=\$crop" } else { "" }',
+                '        \$vFilters += "[0:v]trim=start_frame=\$startF:end_frame=\$endF,setpts=PTS-STARTPTS\$transpose\$flip\$cropFilter,scale=w=\$targetW:h=\$targetH:force_original_aspect_ratio=decrease,pad=\$targetW:\$targetH:(ow-iw)/2:(oh-ih)/2,setsar=1[\$vName]"',
                 '        if (\$hasAudio) {',
                 '            \$vStart = (\$seg.start).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
                 '            \$vEnd = (\$seg.end).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
@@ -3390,7 +3449,7 @@
                     scriptLines.push(`    \$tgtDirPath = (Join-Path -Path \"$targetProjectPath\" -ChildPath \$dirName)`);
                     scriptLines.push(`    if (-not (Test-Path -LiteralPath \"\$tgtDirPath\")) { [System.IO.Directory]::CreateDirectory(\"\$tgtDirPath\") | Out-Null }`);
                     scriptLines.push(`    if (Test-Path -LiteralPath \"$srcDirPath\") {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$srcDirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | ForEach-Object { Move-Item -LiteralPath \"\$(\$_.FullName)\" -Destination \"$tgtDirPath\" -Force }`);
+                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$srcDirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | ForEach-Object { Move-Item -LiteralPath \"\$(\$_.FullName)\" -Destination \"$tgtDirPath\" -Force }`);
                     scriptLines.push(`        Write-Host "Moved thumbnails for ${escapedVideoName} to ${escapedTargetProjectPath}\\$dirName"`);
                     scriptLines.push(`    }`);
                     scriptLines.push(`}`);
@@ -3545,7 +3604,8 @@
 
                     scriptLines.push(`    \$processedVideoPath = (Join-Path -Path (Split-Path -Parent \$sourceVideoPath) -ChildPath ('processed_' + '${escapedVideoName}'))`);
                     const isFlipped = sel.editFlipped ? '\$true' : '\$false';
-                    scriptLines.push(`    Process-Video -sourcePath \$sourceVideoPath -targetPath \$processedVideoPath -cuts \$cuts -markers \$markers -flipped ${isFlipped}`);
+                    const cropArg = sel.crop ? `'${escapePSString(sel.crop)}'` : '\$null';
+                    scriptLines.push(`    Process-Video -sourcePath \$sourceVideoPath -targetPath \$processedVideoPath -cuts \$cuts -markers \$markers -flipped ${isFlipped} -crop ${cropArg}`);
                     scriptLines.push(`    if (Test-Path -LiteralPath \"$processedVideoPath\") {`);
                     scriptLines.push(`        if (Test-Path -LiteralPath \"$sourceVideoPath\") { Remove-Item -LiteralPath \"$sourceVideoPath\" -Force }`);
                     scriptLines.push(`        Move-Item -LiteralPath \"$processedVideoPath\" -Destination \"$sourceVideoPath\" -Force`);
@@ -3559,15 +3619,18 @@
                 let targetPathConstruction = `(Join-Path -Path (${targetBaseRes}) -ChildPath '${escapedVideoName}')`;
 
                 if (sel.deleteEditThumbnails) {
-                    summaryActions.thumb_cleanup.push(`${sel.videoName}: Delete Edit Thumbnails`);
+                    summaryActions.thumb_cleanup.push(`${sel.videoName}: Delete Thumbnails`);
                     const thumbBase = sel.videoName.substring(0, sel.videoName.lastIndexOf('.'));
                     const escapedThumbBase = escapePSString(thumbBase);
                     const projRes = getPSPathRes('\$BaseDir', sel.projectPath, sel.projectName, '');
-                    scriptLines.push(`    # Deleting Edit Thumbnails for: ${sel.videoName}`);
-                    scriptLines.push(`    \$editThumbDir = (Join-Path -Path ${projRes} -ChildPath 'Edit Thumbnails')`);
-                    scriptLines.push(`    if (Test-Path -LiteralPath \$editThumbDir) {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \$editThumbDir | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | Remove-Item -Force`);
-                    scriptLines.push(`        Write-Host "Deleted edit thumbnails for: ${escapedVideoName}"`);
+                    scriptLines.push(`    # Deleting Thumbnails for: ${sel.videoName}`);
+                    scriptLines.push(`    \$thumbDirs = @('Thumbnails', 'Edit Thumbnails')`);
+                    scriptLines.push(`    foreach (\$dirName in \$thumbDirs) {`);
+                    scriptLines.push(`        \$dirPath = (Join-Path -Path ${projRes} -ChildPath \$dirName)`);
+                    scriptLines.push(`        if (Test-Path -LiteralPath \$dirPath) {`);
+                    scriptLines.push(`            Get-ChildItem -LiteralPath \$dirPath | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | Remove-Item -Force`);
+                    scriptLines.push(`            Write-Host "Deleted thumbnails in \$dirName for: ${escapedVideoName}"`);
+                    scriptLines.push(`        }`);
                     scriptLines.push(`    }`);
                 }
 
@@ -3647,7 +3710,7 @@
                     scriptLines.push(`foreach (\$dirName in \$thumbDirs) {`);
                     scriptLines.push(`    \$dirPath = (Join-Path -Path \"$projectPath\" -ChildPath \$dirName)`);
                     scriptLines.push(`    if (Test-Path -LiteralPath \"$dirPath\") {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$dirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | Remove-Item -Force`);
+                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$dirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | Remove-Item -Force`);
                     scriptLines.push(`        Write-Host "Deleted thumbnails for ${escapedVideoName} in \$dirName"`);
                     scriptLines.push(`    }`);
                     scriptLines.push(`}`);
@@ -3787,13 +3850,16 @@
                 if (sel && sel.editModeRotated) {
                     if (hasSessionRotation) dataParts.push('edit_rotated:true');
                     if (hasSessionCuts) dataParts.push('has_cuts:true');
-                    if (!hasSessionRotation && !hasSessionCuts && hasSessionOther) dataParts.push('edit_rotated:true');
+                    if (sel.crop) dataParts.push(`crop:${sel.crop}`);
+                    if (!hasSessionRotation && !hasSessionCuts && hasSessionOther && !sel.crop) dataParts.push('edit_rotated:true');
                 } else if (hasLoadedEdit) {
                     // Restore loaded flags if not overwritten by a session commit
                     const existing = editModeRotatedVideos.get(key);
                     if (typeof existing === 'string') {
                         if (existing.includes('edit_rot:') || existing.includes('edit_rotated:true')) dataParts.push('edit_rotated:true');
                         if (existing.includes('cuts:') || existing.includes('has_cuts:true')) dataParts.push('has_cuts:true');
+                        const cMatch = existing.match(/crop:([^|]+)/);
+                        if (cMatch) dataParts.push(`crop:${cMatch[1]}`);
                     } else {
                         dataParts.push('edit_rotated:true');
                     }
@@ -3990,6 +4056,9 @@
                                 if (part.startsWith('cuts:') || part === 'has_cuts:true') {
                                     sel.loadedHasCuts = true;
                                 }
+                if (part.startsWith('crop:')) {
+                    sel.crop = part.substring(5);
+                }
                             }
                         });
                     }
@@ -4514,6 +4583,16 @@
                         thumbnailsContainer.className = 'thumbnails-container';
                         rowDiv.appendChild(thumbnailsContainer);
 
+                        thumbnailsContainer.addEventListener('click', (e) => {
+                            if (e.target === thumbnailsContainer) {
+                                const key = project.path + '|' + videoFile.name;
+                                const selection = shortcutSelections.get(key);
+                                const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
+                                const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                            }
+                        });
+
                         let initialShortcutType = '';
                         if (rootScEntry && typeof rootScEntry === 'string') {
                             if (rootScEntry === 'BOTH') initialShortcutType = 'both-sc';
@@ -4589,7 +4668,7 @@
                             const selection = shortcutSelections.get(key);
                             const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
                             const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                            playVideo(videoFile, activeRotation, activeFlipped);
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                         });
 
                             const url = URL.createObjectURL(file);
@@ -4746,6 +4825,26 @@
                             thumbnailsContainer.className = 'thumbnails-container';
                             rowDiv.appendChild(thumbnailsContainer);
 
+                            thumbnailsContainer.addEventListener('click', async (e) => {
+                                if (e.target === thumbnailsContainer) {
+                                    if (!videoFile) {
+                                        for await (const entry of subfolderHandle.values()) {
+                                            if (entry.kind === 'file' && entry.name.startsWith(videoBaseName)) {
+                                                videoFile = await entry.getFile();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (videoFile) {
+                                        const key = subfolderName + '|' + videoBaseName;
+                                        const selection = shortcutSelections.get(key);
+                                        const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
+                                        const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                        playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                                    }
+                                }
+                            });
+
                             canvasElements.push(rowDiv);
                             updateRowUI(rowDiv, videoBaseName, subfolderName);
 
@@ -4789,7 +4888,7 @@
                                         const selection = shortcutSelections.get(key);
                                         const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
                                         const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                                        playVideo(videoFile, activeRotation, activeFlipped);
+                                        playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                                     }
                                 });
 
@@ -5042,6 +5141,14 @@
                         thumbnailsContainer.innerHTML = '';
                         const key = project.path + '|Playlist Item';
                         let selection = shortcutSelections.get(key);
+
+                            thumbnailsContainer.onclick = (e) => {
+                                if (e.target === thumbnailsContainer) {
+                                    const activeRotation = (selection && selection.rotation) ? selection.rotation : "0";
+                                    const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                    playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                                }
+                            };
                         if (selection) {
                             selection.videoName = video.name;
                             selection.subfolder = video.subfolder;
@@ -5067,7 +5174,7 @@
                                 e.stopPropagation();
                                 const activeRotation = (selection && selection.rotation) ? selection.rotation : "0";
                                 const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                                playVideo(videoFile, activeRotation, activeFlipped);
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                             });
 
                             const url = URL.createObjectURL(file);
