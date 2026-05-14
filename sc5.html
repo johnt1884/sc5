@@ -645,6 +645,26 @@
         .handle-s  { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
         .handle-e  { top: 50%; right: -6px; transform: translateY(-50%); cursor: e-resize; }
         .handle-w  { top: 50%; left: -6px; transform: translateY(-50%); cursor: w-resize; }
+        .crop-btn-confirm, .crop-btn-cancel {
+            position: absolute;
+            top: 5px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+            z-index: 25;
+            user-select: none;
+        }
+        .crop-btn-confirm { right: 35px; border-color: #43a047; color: #43a047; }
+        .crop-btn-cancel { right: 5px; border-color: #f44336; color: #f44336; }
+        .crop-btn-confirm:hover { background: #43a047; color: white; }
+        .crop-btn-cancel:hover { background: #f44336; color: white; }
         #editor-timelineWrap { width: 98%; position: relative; user-select: none; margin-top: 10px; }
         #editor-timeline { height: 18px; background: #333; border-radius: 9px; position: relative; cursor: pointer; margin-bottom: 20px; }
         #editor-frameTimeline { 
@@ -872,7 +892,9 @@
                 <div id="editor-playerWrap">
                     <div id="editor-videoContainer">
                         <div id="editor-videoOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); pointer-events: none; display: none; z-index: 10;"></div>
-                        <video id="editor-mainVideo" controls muted preload="metadata"></video>
+                        <div id="editor-videoClipper" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                            <video id="editor-mainVideo" controls muted preload="metadata"></video>
+                        </div>
                         <div id="editor-cropBox">
                             <div class="crop-handle handle-nw" data-handle="nw"></div>
                             <div class="crop-handle handle-ne" data-handle="ne"></div>
@@ -882,6 +904,8 @@
                             <div class="crop-handle handle-s" data-handle="s"></div>
                             <div class="crop-handle handle-e" data-handle="e"></div>
                             <div class="crop-handle handle-w" data-handle="w"></div>
+                            <div id="editor-cropConfirm" class="crop-btn-confirm" title="Confirm Crop">✔</div>
+                            <div id="editor-cropCancel" class="crop-btn-cancel" title="Cancel Crop">✖</div>
                         </div>
                     </div>
                     <div id="editor-timelineWrap">
@@ -1004,6 +1028,8 @@
         const editorDeleteEditThumbsBtn = document.getElementById('editor-deleteEditThumbsBtn');
         const editorCropBtn = document.getElementById('editor-cropBtn');
         const editorCropBox = document.getElementById('editor-cropBox');
+        const editorCropConfirm = document.getElementById('editor-cropConfirm');
+        const editorCropCancel = document.getElementById('editor-cropCancel');
         const editorResetBtn = document.getElementById('editor-resetBtn');
         const editorDeleteFrameBtn = document.getElementById('editor-deleteFrameBtn');
         let selectedVideoKey = null;
@@ -1051,6 +1077,7 @@
         let editorCurrentAppliedFlip = false;
         let editorDeleteEditThumbsFlag = false;
         let editorCurrentCrop = null;
+        let editorPendingCrop = null;
         let currentlyPlayingRow = null;
         let editorCropDragging = false;
         let editorCropResizing = null;
@@ -1308,6 +1335,7 @@
                 transform += ' scaleX(-1)';
             }
             editorMainVideo.style.transform = transform;
+            applyCropPreview();
 
             // Handle container resizing for vertical rotation (90/270)
             const isVertical = (editorCurrentAppliedRotation === 90 || editorCurrentAppliedRotation === 270);
@@ -1664,6 +1692,8 @@
             }
             editorDeleteEditThumbsFlag = selection ? !!selection.deleteEditThumbnails : false;
             editorCurrentCrop = selection ? (selection.crop || null) : null;
+            editorPendingCrop = editorCurrentCrop;
+            applyCropPreview();
             
             if (editorFlipBtn) {
                 editorFlipBtn.classList.toggle('active', editorCurrentAppliedFlip);
@@ -1895,8 +1925,34 @@
                 cropW = Math.max(1, Math.min(cropW, rect.vW - cropX));
                 cropH = Math.max(1, Math.min(cropH, rect.vH - cropY));
 
-                editorCurrentCrop = `${cropW}:${cropH}:${cropX}:${cropY}`;
-                editorCropBtn.title = `Crop: ${editorCurrentCrop}`;
+                editorPendingCrop = `${cropW}:${cropH}:${cropX}:${cropY}`;
+            }
+
+            function applyCropPreview() {
+                const clipper = document.getElementById('editor-videoClipper');
+                if (editorCurrentCrop) {
+                    const rect = getActualVideoRect();
+                    if (!rect) return;
+                    const container = document.getElementById('editor-videoContainer');
+                    const cW = container.clientWidth;
+                    const cH = container.clientHeight;
+
+                    const parts = editorCurrentCrop.split(':').map(Number);
+
+                    const visualCropX = rect.x + (parts[2] / rect.vW) * rect.w;
+                    const visualCropY = rect.y + (parts[3] / rect.vH) * rect.h;
+                    const visualCropW = (parts[0] / rect.vW) * rect.w;
+                    const visualCropH = (parts[1] / rect.vH) * rect.h;
+
+                    const pT = (visualCropY / cH) * 100;
+                    const pR = 100 - ((visualCropX + visualCropW) / cW) * 100;
+                    const pB = 100 - ((visualCropY + visualCropH) / cH) * 100;
+                    const pL = (visualCropX / cW) * 100;
+
+                    clipper.style.clipPath = `inset(${pT}% ${pR}% ${pB}% ${pL}%)`;
+                } else {
+                    clipper.style.clipPath = '';
+                }
             }
 
             if (editorCropBtn) {
@@ -1904,25 +1960,24 @@
                     const isVisible = editorCropBox.style.display === 'block';
                     if (isVisible) {
                         editorCropBox.style.display = 'none';
-                        editorCropBtn.classList.remove('active');
-                        editorCropBtn.style.backgroundColor = '';
+                        editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                        editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
                     } else {
                         editorCropBox.style.display = 'block';
                         editorCropBtn.classList.add('active');
-                        editorCropBtn.style.backgroundColor = 'rgba(67, 160, 71, 0.3)';
+                        editorCropBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
 
                         const rect = getActualVideoRect();
                         if (rect) {
                             if (editorCurrentCrop) {
                                 const parts = editorCurrentCrop.split(':').map(Number);
                                 if (parts.length === 4) {
-                                    const vW = editorMainVideo.videoWidth;
-                                    const vH = editorMainVideo.videoHeight;
-                                    editorCropBox.style.width = (parts[0] / vW * rect.w) + 'px';
-                                    editorCropBox.style.height = (parts[1] / vH * rect.h) + 'px';
-                                    editorCropBox.style.left = (rect.x + (parts[2] / vW * rect.w)) + 'px';
-                                    editorCropBox.style.top = (rect.y + (parts[3] / vH * rect.h)) + 'px';
+                                    editorCropBox.style.width = (parts[0] / rect.vW * rect.w) + 'px';
+                                    editorCropBox.style.height = (parts[1] / rect.vH * rect.h) + 'px';
+                                    editorCropBox.style.left = (rect.x + (parts[2] / rect.vW * rect.w)) + 'px';
+                                    editorCropBox.style.top = (rect.y + (parts[3] / rect.vH * rect.h)) + 'px';
                                 }
+                                editorPendingCrop = editorCurrentCrop;
                             } else {
                                 // Default to 80% of video size
                                 editorCropBox.style.width = (rect.w * 0.8) + 'px';
@@ -1935,6 +1990,24 @@
                     }
                 };
             }
+
+            editorCropConfirm.onclick = (e) => {
+                e.stopPropagation();
+                editorCurrentCrop = editorPendingCrop;
+                editorCropBox.style.display = 'none';
+                editorCropBtn.classList.add('active');
+                editorCropBtn.style.backgroundColor = 'rgba(67, 160, 71, 0.3)';
+                editorCropBtn.title = `Crop: ${editorCurrentCrop}`;
+                applyCropPreview();
+            };
+
+            editorCropCancel.onclick = (e) => {
+                e.stopPropagation();
+                editorCropBox.style.display = 'none';
+                editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                editorPendingCrop = editorCurrentCrop;
+            };
 
             editorCropBox.onmousedown = (e) => {
                 if (e.target.classList.contains('crop-handle')) {
@@ -2022,6 +2095,8 @@
                             editorDeleteEditThumbsBtn.style.backgroundColor = '';
                         }
                         editorCurrentCrop = null;
+                        editorPendingCrop = null;
+                        applyCropPreview();
                         if (editorCropBtn) {
                             editorCropBtn.classList.remove('active');
                             editorCropBtn.style.backgroundColor = '';
@@ -3741,7 +3816,7 @@
                 const editRotationChanged = sel.editRotation && sel.editRotation !== "0";
                 const editFlippedChanged = !!sel.editFlipped;
                 
-                const needsProcessing = (hasCuts || markersChanged || editRotationChanged || editFlippedChanged) && sel.editModeRotated;
+                const needsProcessing = (hasCuts || markersChanged || editRotationChanged || editFlippedChanged || sel.crop) && sel.editModeRotated;
 
                 const rotationChanged = sel.rotation !== initialRot;
                 const flippedChanged = !!sel.flipped !== initialFlipped;
@@ -3750,10 +3825,11 @@
                 const selectionType = sel.type;
 
                 // Prior edits that aren't being re-processed this session
-                if (!sel.editModeRotated && (hasCuts || markersChanged || editRotationChanged || editFlippedChanged)) {
+                if (!sel.editModeRotated && (hasCuts || markersChanged || editRotationChanged || editFlippedChanged || sel.crop)) {
                     let priorDesc = `${sel.videoName} (`;
                     if (sel.editRotation && sel.editRotation !== "0") priorDesc += `Rot ${sel.editRotation}°, `;
                     if (sel.editFlipped) priorDesc += "Flip, ";
+                    if (sel.crop) priorDesc += `Crop ${sel.crop}, `;
                     if (sel.cuts && sel.cuts.length > 0) priorDesc += `${sel.cuts.length} Cuts, `;
                     priorDesc = priorDesc.replace(/, $/, ")").replace(/\($/, "");
                     summaryActions.prior_edits.push(priorDesc);
@@ -3773,6 +3849,7 @@
                     let editDesc = `${sel.videoName} (`;
                     if (sel.editRotation && sel.editRotation !== "0") editDesc += `Rotate ${sel.editRotation}°, `;
                     if (sel.editFlipped) editDesc += "H-Flip, ";
+                    if (sel.crop) editDesc += `Crop ${sel.crop}, `;
                     if (sel.cuts && sel.cuts.length > 0) editDesc += `${sel.cuts.length} Cuts, `;
                     editDesc = editDesc.replace(/, $/, ")").replace(/\($/, "");
                     summaryActions.edits.push(editDesc);
