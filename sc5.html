@@ -2896,9 +2896,8 @@
         }
 
         function createRowActionBar(videoName, projectPath, subfolder, rowDiv, projectName) {
-            bar.className = 'row-action-bar';
-            
-            const leftGroup = document.createElement('div');
+            const bar = document.createElement("div"); bar.className = "row-action-bar";
+            const leftGroup = document.createElement("div");
             leftGroup.className = 'row-action-group-left';
 
             const createBtn = (text, onClick, type = null, color = null) => {
