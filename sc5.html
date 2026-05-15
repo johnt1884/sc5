@@ -3582,7 +3582,7 @@
                 '    \$finalA = if (\$hasAudio) { "; \$aConcat concat=n=\$(\$segments.Count):v=0:a=1[a]" } else { "" }',
                 '    \$fullFilter = (\$vFilters + \$aFilters + \$finalV) -join "; "',
                 '    \$fullFilter += \$finalA',
-                '    \$fullFilter | Out-File -LiteralPath \$filterPath -Encoding utf8',
+                '    \$fullFilter | Out-File -LiteralPath \$filterPath -Encoding ASCII',
                 '    ',
                 '    Write-Host "  > Encoding with filter_complex..."',
                 '    \$mapArgs = if (\$hasAudio) { @("-map", "[v]", "-map", "[a]") } else { @("-map", "[v]") }',
