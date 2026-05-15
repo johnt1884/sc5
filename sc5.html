@@ -1500,6 +1500,17 @@
                 editorCutsListContainer.appendChild(item);
             });
         }
+        async function scanForFile(dirHandle, sub, videoName) {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === "file" && entry.name === videoName) {
+                    return await entry.getFile();
+                } else if (entry.kind === "directory" && !skipDirs.has(entry.name.toLowerCase())) {
+                    const res = await scanForFile(entry, sub, videoName);
+                    if (res) return res;
+                }
+            }
+            return null;
+        }
         function editorUpdateUI() {
             editorRenderCutsList();
             editorCutSegmentBtn.disabled = !(editorPendingCutStart !== null && editorPendingCutEnd !== null);
@@ -1972,18 +1983,7 @@
             let videoFile = null;
             const project = allProjectFolders.find(p => p.path === projectPath);
             if (project) {
-                async function scanForFile(dirHandle, sub) {
-                    for await (const entry of dirHandle.values()) {
-                        if (entry.kind === 'file' && entry.name === videoName) {
-                            return await entry.getFile();
-                        } else if (entry.kind === 'directory' && !skipDirs.has(entry.name.toLowerCase())) {
-                            const res = await scanForFile(entry, sub);
-                            if (res) return res;
-                        }
-                    }
-                    return null;
-                }
-                videoFile = await scanForFile(project.handle, subfolder);
+                videoFile = await scanForFile(project.handle, subfolder, videoName);
             }
 
             if (!videoFile) {
@@ -3568,7 +3568,7 @@
                 '        elseif (\$seg.rotation -eq 270) { \$transpose = ",transpose=2" }',
                 '        \$flip = if (\$flipped) { ",hflip" } else { "" }',
                 '        \$cropFilter = if (\$crop) { ",crop=\$crop" } else { "" }',
-                '        \$vFilters += "[0:v]trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS\${transpose}\${flip}\${cropFilter},scale=w=${targetW}:h=${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i]"',
+                '        \$vFilters += "[0:v]trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS\$transpose\$flip\$cropFilter,scale=w=${targetW}:h=${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i]"',
                 '        if (\$hasAudio) {',
                 '            \$vStart = (\$seg.start).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
                 '            \$vEnd = (\$seg.end).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
@@ -3585,7 +3585,7 @@
                 '    ',
                 '    Write-Host "  > Encoding with filter_complex..."',
                 '    \$mapArgs = if (\$hasAudio) { @("-map", "[v]", "-map", "[a]") } else { @("-map", "[v]") }',
-                '    ffmpeg -y -noautorotate -i "\$sourcePath" -filter_complex \"$(Get-Content -LiteralPath $filterPath -Raw)\" @mapArgs -c:v libx264 -crf 17 -preset veryslow -c:a aac -b:a 192k -metadata:s:v:0 rotate=0 -movflags +faststart "\$targetPath"',
+                '    ffmpeg -y -noautorotate -i "\$sourcePath" -filter_complex \"$(Get-Content -LiteralPath \$filterPath -Raw)\" @mapArgs -c:v libx264 -crf 17 -preset veryslow -c:a aac -b:a 192k -metadata:s:v:0 rotate=0 -movflags +faststart "\$targetPath"',
                 '    Remove-Item -LiteralPath "\$tempDir" -Recurse -Force',
                 '}',
                 '',
