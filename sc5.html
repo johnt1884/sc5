@@ -19,6 +19,7 @@
             --playlist-sc-color: #ff00ff;
             --selected-cat-color: #ff0000;
             --edit-cuts-color: #ff8c00;
+            --played-video-color: #4b0082;
         }
         html, body {
             height: 100%;
@@ -418,6 +419,7 @@
             background-color: var(--top-bar-color);
         }
         .bar-button:hover {
+        .bar-button.active { background-color: #43a047; }
             background-color: #166fe5;
         }
         .selection-type-button.active {
@@ -617,9 +619,53 @@
         #editor-playerRow { display: flex; align-items: center; gap: 12px; width: 100%; justify-content: center; }
         .editor-navBtn { background: #222; border: 2px solid #333; color: #fff; padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 18px; }
         #editor-playerWrap { display: flex; flex-direction: column; align-items: center; width: 100%; }
-        #editor-videoContainer { width: 100%; display: flex; align-items: center; justify-content: center; min-height: 260px; position: relative; }
+        #editor-videoContainer { width: 100%; display: flex; align-items: center; justify-content: center; min-height: 260px; position: relative; overflow: hidden; }
         #editor-videoOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); pointer-events: none; display: none; z-index: 10; }
         #editor-mainVideo { max-width: 95%; max-height: 75vh; background: black; border-radius: 6px; object-fit: contain; }
+        #editor-cropBox {
+            position: absolute;
+            border: 2px dashed #00ff00;
+            box-sizing: border-box;
+            display: none;
+            z-index: 20;
+            cursor: move;
+        }
+        .crop-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #00ff00;
+            border: 1px solid #000;
+            border-radius: 2px;
+        }
+        .handle-nw { top: -6px; left: -6px; cursor: nw-resize; }
+        .handle-ne { top: -6px; right: -6px; cursor: ne-resize; }
+        .handle-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+        .handle-se { bottom: -6px; right: -6px; cursor: se-resize; }
+        .handle-n  { top: -6px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+        .handle-s  { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+        .handle-e  { top: 50%; right: -6px; transform: translateY(-50%); cursor: e-resize; }
+        .handle-w  { top: 50%; left: -6px; transform: translateY(-50%); cursor: w-resize; }
+        .crop-btn-confirm, .crop-btn-cancel {
+            position: absolute;
+            top: 5px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+            z-index: 25;
+            user-select: none;
+        }
+        .crop-btn-confirm { right: 35px; border-color: #43a047; color: #43a047; }
+        .crop-btn-cancel { right: 5px; border-color: #f44336; color: #f44336; }
+        .crop-btn-confirm:hover { background: #43a047; color: white; }
+        .crop-btn-cancel:hover { background: #f44336; color: white; }
         #editor-timelineWrap { width: 98%; position: relative; user-select: none; margin-top: 10px; }
         #editor-timeline { height: 18px; background: #333; border-radius: 9px; position: relative; cursor: pointer; margin-bottom: 20px; }
         #editor-frameTimeline { 
@@ -752,6 +798,10 @@
                                 <label for="edit-cuts-color-picker">Edit Button (with cuts)</label>
                                 <input type="color" id="edit-cuts-color-picker" value="#ff8c00">
                             </div>
+                            <div class="options-row">
+                                <label for="played-video-color-picker">Played Video Toolbar</label>
+                                <input type="color" id="played-video-color-picker" value="#4b0082">
+                            </div>
                             <button id="revert-defaults-btn" style="width: 100%; text-align: center; border-top: 1px solid #ccc; font-weight: bold;">Revert to Default Colors</button>
                         </div>
                     </div>
@@ -843,7 +893,21 @@
                 <div id="editor-playerWrap">
                     <div id="editor-videoContainer">
                         <div id="editor-videoOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); pointer-events: none; display: none; z-index: 10;"></div>
-                        <video id="editor-mainVideo" controls muted preload="metadata"></video>
+                        <div id="editor-videoClipper" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                            <video id="editor-mainVideo" controls muted preload="metadata"></video>
+                        </div>
+                        <div id="editor-cropBox">
+                            <div class="crop-handle handle-nw" data-handle="nw"></div>
+                            <div class="crop-handle handle-ne" data-handle="ne"></div>
+                            <div class="crop-handle handle-sw" data-handle="sw"></div>
+                            <div class="crop-handle handle-se" data-handle="se"></div>
+                            <div class="crop-handle handle-n" data-handle="n"></div>
+                            <div class="crop-handle handle-s" data-handle="s"></div>
+                            <div class="crop-handle handle-e" data-handle="e"></div>
+                            <div class="crop-handle handle-w" data-handle="w"></div>
+                            <div id="editor-cropConfirm" class="crop-btn-confirm" title="Confirm Crop">✔</div>
+                            <div id="editor-cropCancel" class="crop-btn-cancel" title="Cancel Crop">✖</div>
+                        </div>
                     </div>
                     <div id="editor-timelineWrap">
                         <div id="editor-timeline">
@@ -869,7 +933,8 @@
                             <button id="editor-markEndBtn" class="bar-button" style="border-color:#43a047">Mark End</button>
                             <button id="editor-flipBtn" class="bar-button">Flip H</button>
                             <button id="editor-cutSegmentBtn" class="bar-button" style="background:#d32f2f;color:white" disabled>Cut Segment</button>
-                            <button id="editor-deleteEditThumbsBtn" class="bar-button" style="border-color:#f44336">Delete Edit Thumbnails</button>
+                            <button id="editor-cropBtn" class="bar-button" style="border-color:#43a047">Crop</button>
+                            <button id="editor-deleteEditThumbsBtn" class="bar-button" style="border-color:#f44336">Delete Thumbnails</button>
                             <button id="editor-commitBtn" class="editor-greenBtn">Commit</button>
                         </div>
                         <div class="editor-control-group" style="justify-content:flex-end">
@@ -962,6 +1027,10 @@
         const editorFileInfo = document.getElementById('editor-fileInfo');
         const editorFlipBtn = document.getElementById('editor-flipBtn');
         const editorDeleteEditThumbsBtn = document.getElementById('editor-deleteEditThumbsBtn');
+        const editorCropBtn = document.getElementById('editor-cropBtn');
+        const editorCropBox = document.getElementById('editor-cropBox');
+        const editorCropConfirm = document.getElementById('editor-cropConfirm');
+        const editorCropCancel = document.getElementById('editor-cropCancel');
         const editorResetBtn = document.getElementById('editor-resetBtn');
         const editorDeleteFrameBtn = document.getElementById('editor-deleteFrameBtn');
         let selectedVideoKey = null;
@@ -1008,6 +1077,13 @@
         let editorCurrentAppliedRotation = 0;
         let editorCurrentAppliedFlip = false;
         let editorDeleteEditThumbsFlag = false;
+        let editorCurrentCrop = null;
+        let editorPendingCrop = null;
+        let currentlyPlayingRow = null;
+        let editorCropDragging = false;
+        let editorCropResizing = null;
+        let editorCropStartPos = { x: 0, y: 0 };
+        let editorCropBoxStart = { x: 0, y: 0, w: 0, h: 0 };
 
         let videoCategories = new Map(); // Key: projectPath + '|' + videoName, Value: Set of category names
         let editModeRotatedVideos = new Map(); // Key: projectPath + '|' + videoName, Value: true
@@ -1022,6 +1098,7 @@
         const categoriesPanel = document.getElementById('categories-panel');
         const panelResizer = document.getElementById('panel-resizer');
         const panelContent = document.getElementById('panel-content');
+        let lastUsedMoveTarget = localStorage.getItem("lastUsedMoveTarget");
 
         function updateRowNumbers() {
             const showNumbers = showNumbersCheckbox.checked;
@@ -1260,6 +1337,7 @@
                 transform += ' scaleX(-1)';
             }
             editorMainVideo.style.transform = transform;
+            applyCropPreview();
 
             // Handle container resizing for vertical rotation (90/270)
             const isVertical = (editorCurrentAppliedRotation === 90 || editorCurrentAppliedRotation === 270);
@@ -1423,6 +1501,17 @@
                 };
                 editorCutsListContainer.appendChild(item);
             });
+        }
+        async function scanForFile(dirHandle, sub, videoName) {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === "file" && entry.name === videoName) {
+                    return await entry.getFile();
+                } else if (entry.kind === "directory" && !skipDirs.has(entry.name.toLowerCase())) {
+                    const res = await scanForFile(entry, sub, videoName);
+                    if (res) return res;
+                }
+            }
+            return null;
         }
         function editorUpdateUI() {
             editorRenderCutsList();
@@ -1594,6 +1683,246 @@
         }
 
 
+
+            function getActualVideoRect() {
+                const video = editorMainVideo;
+                const vRect = video.getBoundingClientRect();
+                const container = document.getElementById('editor-videoContainer');
+                const cRect = container.getBoundingClientRect();
+
+                let vW = video.videoWidth;
+                let vH = video.videoHeight;
+                if (!vW || !vH) return null;
+
+                const isRot90 = (editorCurrentAppliedRotation === 90 || editorCurrentAppliedRotation === 270);
+                if (isRot90) {
+                    [vW, vH] = [vH, vW];
+                }
+
+                const videoAspect = vW / vH;
+                const elementAspect = vRect.width / vRect.height;
+
+                let actualW, actualH, actualX, actualY;
+
+                if (videoAspect > elementAspect) {
+                    actualW = vRect.width;
+                    actualH = actualW / videoAspect;
+                } else {
+                    actualH = vRect.height;
+                    actualW = actualH * videoAspect;
+                }
+
+                actualX = vRect.left - cRect.left + (vRect.width - actualW) / 2;
+                actualY = vRect.top - cRect.top + (vRect.height - actualH) / 2;
+
+                return { x: actualX, y: actualY, w: actualW, h: actualH, vW, vH };
+            }
+
+            function updateCropStringFromBox() {
+                const rect = getActualVideoRect();
+                if (!rect) return;
+
+                const bX = parseFloat(editorCropBox.style.left);
+                const bY = parseFloat(editorCropBox.style.top);
+                const bW = parseFloat(editorCropBox.style.width);
+                const bH = parseFloat(editorCropBox.style.height);
+
+                let cropX = Math.round(((bX - rect.x) / rect.w) * rect.vW);
+                let cropY = Math.round(((bY - rect.y) / rect.h) * rect.vH);
+                let cropW = Math.round((bW / rect.w) * rect.vW);
+                let cropH = Math.round((bH / rect.h) * rect.vH);
+
+                // Clamp to video dimensions
+                cropX = Math.max(0, Math.min(cropX, rect.vW - 1));
+                cropY = Math.max(0, Math.min(cropY, rect.vH - 1));
+                cropW = Math.max(1, Math.min(cropW, rect.vW - cropX));
+                cropH = Math.max(1, Math.min(cropH, rect.vH - cropY));
+
+                editorPendingCrop = `${cropW}:${cropH}:${cropX}:${cropY}`;
+            }
+
+            function applyCropPreview() {
+                const clipper = document.getElementById('editor-videoClipper');
+                if (editorCurrentCrop) {
+                    const rect = getActualVideoRect();
+                    if (!rect) return;
+                    const container = document.getElementById('editor-videoContainer');
+                    const cW = container.clientWidth;
+                    const cH = container.clientHeight;
+
+                    const parts = editorCurrentCrop.split(':').map(Number);
+
+                    const visualCropX = rect.x + (parts[2] / rect.vW) * rect.w;
+                    const visualCropY = rect.y + (parts[3] / rect.vH) * rect.h;
+                    const visualCropW = (parts[0] / rect.vW) * rect.w;
+                    const visualCropH = (parts[1] / rect.vH) * rect.h;
+
+                    const pT = (visualCropY / cH) * 100;
+                    const pR = 100 - ((visualCropX + visualCropW) / cW) * 100;
+                    const pB = 100 - ((visualCropY + visualCropH) / cH) * 100;
+                    const pL = (visualCropX / cW) * 100;
+
+                    clipper.style.clipPath = `inset(${pT}% ${pR}% ${pB}% ${pL}%)`;
+                } else {
+                    clipper.style.clipPath = '';
+                }
+            }
+
+            if (editorCropBtn) {
+                editorCropBtn.onclick = () => {
+                    const isVisible = editorCropBox.style.display === 'block';
+                    if (isVisible) {
+                        editorCropBox.style.display = 'none';
+                        editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                        editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                    } else {
+                        editorCropBox.style.display = 'block';
+                        editorCropBtn.classList.add('active');
+                        editorCropBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+
+                        const rect = getActualVideoRect();
+                        if (rect) {
+                            if (editorCurrentCrop) {
+                                const parts = editorCurrentCrop.split(':').map(Number);
+                                if (parts.length === 4) {
+                                    editorCropBox.style.width = (parts[0] / rect.vW * rect.w) + 'px';
+                                    editorCropBox.style.height = (parts[1] / rect.vH * rect.h) + 'px';
+                                    editorCropBox.style.left = (rect.x + (parts[2] / rect.vW * rect.w)) + 'px';
+                                    editorCropBox.style.top = (rect.y + (parts[3] / rect.vH * rect.h)) + 'px';
+                                }
+                                editorPendingCrop = editorCurrentCrop;
+                            } else {
+                                // Default to 80% of video size
+                                editorCropBox.style.width = (rect.w * 0.8) + 'px';
+                                editorCropBox.style.height = (rect.h * 0.8) + 'px';
+                                editorCropBox.style.left = (rect.x + rect.w * 0.1) + 'px';
+                                editorCropBox.style.top = (rect.y + rect.h * 0.1) + 'px';
+                                updateCropStringFromBox();
+                            }
+                        }
+                    }
+                };
+            }
+
+            editorCropConfirm.onclick = (e) => {
+                e.stopPropagation();
+                editorCurrentCrop = editorPendingCrop;
+                editorCropBox.style.display = 'none';
+                editorCropBtn.classList.add('active');
+                editorCropBtn.style.backgroundColor = 'rgba(67, 160, 71, 0.3)';
+                editorCropBtn.title = `Crop: ${editorCurrentCrop}`;
+                applyCropPreview();
+            };
+
+            editorCropCancel.onclick = (e) => {
+                e.stopPropagation();
+                editorCropBox.style.display = 'none';
+                editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                editorPendingCrop = editorCurrentCrop;
+            };
+
+            editorCropBox.onmousedown = (e) => {
+                if (e.target.classList.contains('crop-handle')) {
+                    editorCropResizing = e.target.dataset.handle;
+                } else {
+                    editorCropDragging = true;
+                }
+                editorCropStartPos = { x: e.clientX, y: e.clientY };
+                editorCropBoxStart = {
+                    x: parseFloat(editorCropBox.style.left),
+                    y: parseFloat(editorCropBox.style.top),
+                    w: parseFloat(editorCropBox.style.width),
+                    h: parseFloat(editorCropBox.style.height)
+                };
+                e.preventDefault();
+            };
+
+            window.addEventListener('mousemove', (e) => {
+                if (!editorCropDragging && !editorCropResizing) return;
+
+                const dx = e.clientX - editorCropStartPos.x;
+                const dy = e.clientY - editorCropStartPos.y;
+                const rect = getActualVideoRect();
+                if (!rect) return;
+
+                if (editorCropDragging) {
+                    let newX = editorCropBoxStart.x + dx;
+                    let newY = editorCropBoxStart.y + dy;
+
+                    newX = Math.max(rect.x, Math.min(newX, rect.x + rect.w - editorCropBoxStart.w));
+                    newY = Math.max(rect.y, Math.min(newY, rect.y + rect.h - editorCropBoxStart.h));
+
+                    editorCropBox.style.left = newX + 'px';
+                    editorCropBox.style.top = newY + 'px';
+                } else if (editorCropResizing) {
+                    let newX = editorCropBoxStart.x;
+                    let newY = editorCropBoxStart.y;
+                    let newW = editorCropBoxStart.w;
+                    let newH = editorCropBoxStart.h;
+
+                    if (editorCropResizing.includes('w')) {
+                        const maxDx = editorCropBoxStart.x - rect.x;
+                        const actualDx = Math.max(-maxDx, Math.min(dx, editorCropBoxStart.w - 10));
+                        newX = editorCropBoxStart.x + actualDx;
+                        newW = editorCropBoxStart.w - actualDx;
+                    }
+                    if (editorCropResizing.includes('e')) {
+                        const maxDx = rect.x + rect.w - (editorCropBoxStart.x + editorCropBoxStart.w);
+                        newW = Math.max(10, Math.min(editorCropBoxStart.w + dx, editorCropBoxStart.w + maxDx));
+                    }
+                    if (editorCropResizing.includes('n')) {
+                        const maxDy = editorCropBoxStart.y - rect.y;
+                        const actualDy = Math.max(-maxDy, Math.min(dy, editorCropBoxStart.h - 10));
+                        newY = editorCropBoxStart.y + actualDy;
+                        newH = editorCropBoxStart.h - actualDy;
+                    }
+                    if (editorCropResizing.includes('s')) {
+                        const maxDy = rect.y + rect.h - (editorCropBoxStart.y + editorCropBoxStart.h);
+                        newH = Math.max(10, Math.min(editorCropBoxStart.h + dy, editorCropBoxStart.h + maxDy));
+                    }
+
+                    editorCropBox.style.left = newX + 'px';
+                    editorCropBox.style.top = newY + 'px';
+                    editorCropBox.style.width = newW + 'px';
+                    editorCropBox.style.height = newH + 'px';
+                }
+                updateCropStringFromBox();
+            });
+
+            window.addEventListener('mouseup', () => {
+                editorCropDragging = false;
+                editorCropResizing = null;
+            });
+
+            if (editorResetBtn) {
+                editorResetBtn.onclick = () => {
+                    if (confirm('Clear all changes for this video?')) {
+                        editorCurrentCuts = [];
+                        editorMarkers = [];
+                        editorCurrentAppliedFlip = false;
+                        editorCurrentAppliedRotation = 0;
+                        editorDeleteEditThumbsFlag = false;
+                        if (editorDeleteEditThumbsBtn) {
+                            editorDeleteEditThumbsBtn.classList.remove('active');
+                            editorDeleteEditThumbsBtn.style.backgroundColor = '';
+                        }
+                        editorCurrentCrop = null;
+                        editorPendingCrop = null;
+                        applyCropPreview();
+                        if (editorCropBtn) {
+                            editorCropBtn.classList.remove('active');
+                            editorCropBtn.style.backgroundColor = '';
+                            editorCropBox.style.display = 'none';
+                        }
+                        editorPendingCutStart = null;
+                        editorPendingCutEnd = null;
+                        editorApplyRotationToViewer(0, false);
+                        editorUpdateUI();
+                    }
+                };
+            }
+
         async function openVideoEditor(videoName, projectPath, subfolder, projectName) {
             const key = projectPath + '|' + videoName;
             editorCurrentVideo = { videoName, projectPath, subfolder, projectName };
@@ -1604,7 +1933,7 @@
             // Load existing state or start with blank slate
             editorCurrentCuts = (selection && selection.cuts) ? JSON.parse(JSON.stringify(selection.cuts)) : [];
             editorMarkers = (selection && selection.markers) ? JSON.parse(JSON.stringify(selection.markers)) : [];
-            
+
             // If after using the main page buttons (which clear markers), the slate should be cleared in the editor.
             // Resuming is supported only if markers or cuts exist.
             if (editorMarkers.length === 0 && editorCurrentCuts.length === 0) {
@@ -1615,7 +1944,10 @@
                 editorCurrentAppliedFlip = selection ? !!selection.editFlipped : false;
             }
             editorDeleteEditThumbsFlag = selection ? !!selection.deleteEditThumbnails : false;
-            
+            editorCurrentCrop = selection ? (selection.crop || null) : null;
+            editorPendingCrop = editorCurrentCrop;
+            applyCropPreview();
+
             if (editorFlipBtn) {
                 editorFlipBtn.classList.toggle('active', editorCurrentAppliedFlip);
                 editorFlipBtn.style.backgroundColor = editorCurrentAppliedFlip ? 'rgba(255, 255, 255, 0.2)' : '';
@@ -1625,11 +1957,20 @@
                 editorDeleteEditThumbsBtn.classList.toggle('active', editorDeleteEditThumbsFlag);
                 editorDeleteEditThumbsBtn.style.backgroundColor = editorDeleteEditThumbsFlag ? 'rgba(244, 67, 54, 0.3)' : '';
             }
+
+            if (editorCropBtn) {
+                editorCropBtn.classList.toggle('active', !!editorCurrentCrop);
+                editorCropBtn.style.backgroundColor = editorCurrentCrop ? 'rgba(67, 160, 71, 0.3)' : '';
+                editorCropBtn.title = editorCurrentCrop ? `Crop: ${editorCurrentCrop}` : 'Crop';
+                if (!editorCurrentCrop) {
+                    editorCropBox.style.display = 'none';
+                }
+            }
             editorPendingCutStart = null;
             editorPendingCutEnd = null;
             editorEstimatedFPS = 30;
             editorFrameOffset = 1 / 30;
-            
+
             // Try to get FPS from selection if already edited
             const existingSel = shortcutSelections.get(projectPath + '|' + videoName);
             if (existingSel && existingSel.fps) {
@@ -1644,18 +1985,7 @@
             let videoFile = null;
             const project = allProjectFolders.find(p => p.path === projectPath);
             if (project) {
-                async function scanForFile(dirHandle, sub) {
-                    for await (const entry of dirHandle.values()) {
-                        if (entry.kind === 'file' && entry.name === videoName) {
-                            return await entry.getFile();
-                        } else if (entry.kind === 'directory' && !skipDirs.has(entry.name.toLowerCase())) {
-                            const res = await scanForFile(entry, sub);
-                            if (res) return res;
-                        }
-                    }
-                    return null;
-                }
-                videoFile = await scanForFile(project.handle, subfolder);
+                videoFile = await scanForFile(project.handle, subfolder, videoName);
             }
 
             if (!videoFile) {
@@ -1667,7 +1997,7 @@
             currentVideoUrl = URL.createObjectURL(videoFile);
             editorMainVideo.src = currentVideoUrl;
             editorModal.style.display = 'flex';
-            
+
             // Ensure UI reflects loaded state
             editorUpdateUI();
         }
@@ -1745,12 +2075,12 @@
                     const snapTime = frame / editorEstimatedFPS;
                     const currentRot = editorGetRotationAt(snapTime);
                     const nr = (currentRot + d) % 360;
-                    
+
                     // Deduplicate markers at same time (small threshold)
                     editorMarkers = editorMarkers.filter(m => Math.abs(m.time - snapTime) > 0.001);
                     editorMarkers.push({ time: snapTime, rotation: nr });
                     editorMarkers.sort((a, b) => a.time - b.time);
-                    
+
                     editorRenderMarkers();
                     editorApplyRotationToViewer(nr);
                 };
@@ -1779,26 +2109,6 @@
                         editorDeleteEditThumbsBtn.style.backgroundColor = 'rgba(244, 67, 54, 0.3)';
                     } else {
                         editorDeleteEditThumbsBtn.style.backgroundColor = '';
-                    }
-                };
-            }
-
-            if (editorResetBtn) {
-                editorResetBtn.onclick = () => {
-                    if (confirm('Clear all changes for this video?')) {
-                        editorCurrentCuts = [];
-                        editorMarkers = [];
-                        editorCurrentAppliedFlip = false;
-                        editorCurrentAppliedRotation = 0;
-                        editorDeleteEditThumbsFlag = false;
-                        if (editorDeleteEditThumbsBtn) {
-                            editorDeleteEditThumbsBtn.classList.remove('active');
-                            editorDeleteEditThumbsBtn.style.backgroundColor = '';
-                        }
-                        editorPendingCutStart = null;
-                        editorPendingCutEnd = null;
-                        editorApplyRotationToViewer(0, false);
-                        editorUpdateUI();
                     }
                 };
             }
@@ -1859,7 +2169,7 @@
                     finalEditRotation = uniqueMarkers[uniqueMarkers.length - 1].rotation.toString();
                 }
 
-                const editChanged = hasCuts || (editRotationType !== 'none') || (finalEditFlipped !== false);
+                const editChanged = hasCuts || (editRotationType !== 'none') || (finalEditFlipped !== false) || (editorCurrentCrop !== null);
 
                 if (!selection) {
                     selection = {
@@ -1880,6 +2190,7 @@
                 selection.editRotationType = editRotationType;
                 selection.isFullLength = isFullLength;
                 selection.editFlipped = finalEditFlipped;
+                selection.crop = editorCurrentCrop;
                 selection.deleteEditThumbnails = editorDeleteEditThumbsFlag;
                 selection.fps = editorEstimatedFPS;
                 
@@ -1965,7 +2276,8 @@
                 'date-text-color': document.getElementById('date-text-color-picker'),
                 'playlist-sc-color': document.getElementById('playlist-sc-color-picker'),
                 'selected-cat-color': document.getElementById('selected-cat-color-picker'),
-                'edit-cuts-color': document.getElementById('edit-cuts-color-picker')
+                'edit-cuts-color': document.getElementById('edit-cuts-color-picker'),
+                'played-video-color': document.getElementById('played-video-color-picker')
             };
 
             // Load saved colors
@@ -2008,7 +2320,8 @@
                         'date-text-color': '#01ffff',
                         'playlist-sc-color': '#ff00ff',
                         'selected-cat-color': '#ff0000',
-                        'edit-cuts-color': '#ff8c00'
+                        'edit-cuts-color': '#ff8c00',
+                        'played-video-color': '#4b0082'
                     };
                     Object.keys(defaults).forEach(id => {
                         const color = defaults[id];
@@ -2337,7 +2650,17 @@
             // Deprecated - row action bars handle their own active states
         }
 
-        function playVideo(file, rotation, flipped = false) {
+        function playVideo(file, rotation, flipped = false, rowDiv = null) {
+            if (currentlyPlayingRow) {
+                const oldBar = currentlyPlayingRow.querySelector('.row-action-bar');
+                if (oldBar) oldBar.style.backgroundColor = '';
+            }
+            if (rowDiv) {
+                currentlyPlayingRow = rowDiv;
+                const newBar = rowDiv.querySelector('.row-action-bar');
+                if (newBar) newBar.style.backgroundColor = 'var(--played-video-color)';
+            }
+
             if (currentVideoUrl) {
                 URL.revokeObjectURL(currentVideoUrl);
             }
@@ -2509,7 +2832,8 @@
                             }
                             if (selection.editFlipped) tooltipParts.push(`Edit Flip: ON`);
                             if (selection.cuts && selection.cuts.length > 0) tooltipParts.push(`Cuts: ${selection.cuts.length}`);
-                            if (selection.deleteEditThumbnails) tooltipParts.push(`Delete Edit Thumbs: YES`);
+                            if (selection.crop) tooltipParts.push(`Crop: ${selection.crop}`);
+                            if (selection.deleteEditThumbnails) tooltipParts.push(`Delete Thumbs: YES`);
                         } else if (selection && (selection.loadedEditRotated || selection.loadedHasCuts)) {
                             // Persistent flags from previous session
                             if (selection.loadedEditRotated) tooltipParts.push('Edit Mode: Rotated in previous session');
@@ -2559,21 +2883,31 @@
             const editBtn = rowDiv.querySelector('.edit-btn');
             if (editBtn) {
                 if (hasAnyCuts) {
-                    editBtn.style.backgroundColor = 'var(--edit-cuts-color)';
-                } else {
                     editBtn.style.backgroundColor = '';
                 }
             }
 
+            const moveSelector = rowDiv.querySelector(".move-to-selector");
+            if (moveSelector) {
+                const target = (selection && selection.targetProject) || "";
+                if (target && moveSelector.options.length <= 1) {
+                    allProjectFolders.forEach(proj => {
+                        if (proj.path !== projectPath) {
+                            const opt = document.createElement("option");
+                            opt.value = proj.path;
+                            opt.textContent = proj.name;
+                            moveSelector.appendChild(opt);
+                        }
+                    });
+                }
+                moveSelector.value = target;
+                moveSelector.classList.toggle("active", !!target);
+            }
             debouncedLayout();
         }
-
         function createRowActionBar(videoName, projectPath, subfolder, rowDiv, projectName) {
-            const bar = document.createElement('div');
-            bar.className = 'row-action-bar';
-            
-            const leftGroup = document.createElement('div');
-            leftGroup.className = 'row-action-group-left';
+            const bar = document.createElement("div"); bar.className = "row-action-bar";
+            const leftGroup = document.createElement("div");
 
             const createBtn = (text, onClick, type = null, color = null) => {
                 const btn = document.createElement('button');
@@ -2694,10 +3028,27 @@
                     selection = { videoName, projectPath, subfolder, projectName, type: '', rotation: "0" };
                     shortcutSelections.set(key, selection);
                 }
-                selection.targetProject = targetPath;
+                selection.targetProject = targetPath; if (targetPath) { lastUsedMoveTarget = targetPath; localStorage.setItem("lastUsedMoveTarget", targetPath); document.querySelectorAll(".quick-move-btn").forEach(btn => btn.disabled = false); } updateRowUI(rowDiv, videoName, projectPath);
             };
 
-            leftGroup.appendChild(moveSelect);
+            const quickMoveBtn = document.createElement("button");
+            quickMoveBtn.className = "bar-button row-bar-btn quick-move-btn";
+            quickMoveBtn.textContent = "Move";
+            quickMoveBtn.style.marginLeft = "5px";
+            quickMoveBtn.disabled = !lastUsedMoveTarget;
+
+            quickMoveBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (!lastUsedMoveTarget) return;
+                let selection = shortcutSelections.get(key);
+                if (!selection) {
+                    selection = { videoName, projectPath, subfolder, projectName, type: "", rotation: "0" };
+                    shortcutSelections.set(key, selection);
+                }
+                selection.targetProject = lastUsedMoveTarget;
+                updateRowUI(rowDiv, videoName, projectPath);
+            };
+            leftGroup.appendChild(moveSelect); leftGroup.appendChild(quickMoveBtn);
 
             const editBtn = document.createElement('button');
             editBtn.className = 'bar-button row-bar-btn edit-btn';
@@ -2872,12 +3223,22 @@
             
             const allThumbs = Array.from(document.querySelectorAll('.thumbnail[data-original-width]'));
             if (allThumbs.length > 0) {
-                // Use median width to be robust against both high-res and low-res outliers
-                const widths = allThumbs.map(t => parseFloat(t.dataset.originalWidth)).sort((a, b) => a - b);
-                const heights = allThumbs.map(t => parseFloat(t.dataset.originalHeight)).sort((a, b) => a - b);
+                const effectiveDims = allThumbs.map(t => {
+                    const w = parseFloat(t.dataset.originalWidth);
+                    const h = parseFloat(t.dataset.originalHeight);
+                    const isRot90 = t.classList.contains('rotate-90') || t.classList.contains('rotate-270');
+                    return { w: isRot90 ? h : w, h: isRot90 ? w : h };
+                });
+                const widths = effectiveDims.map(d => d.w).sort((a, b) => a - b);
+                const heights = effectiveDims.map(d => d.h).sort((a, b) => a - b);
                 standardWidth = widths[Math.floor(widths.length / 2)];
                 standardHeight = heights[Math.floor(heights.length / 2)];
-                referenceThumb = allThumbs.find(t => parseFloat(t.dataset.originalWidth) === standardWidth) || allThumbs[0];
+                referenceThumb = allThumbs.find(t => {
+                    const w = parseFloat(t.dataset.originalWidth);
+                    const h = parseFloat(t.dataset.originalHeight);
+                    const isRot90 = t.classList.contains('rotate-90') || t.classList.contains('rotate-270');
+                    return (isRot90 ? h : w) === standardWidth;
+                }) || allThumbs[0];
             }
 
             const calcAutoScale = (refW) => {
@@ -2893,8 +3254,7 @@
             };
 
             if (hScale === null || vScale === null) {
-                const isRot90 = referenceThumb ? (referenceThumb.classList.contains('rotate-90') || referenceThumb.classList.contains('rotate-270')) : false;
-                const auto = calcAutoScale(isRot90 ? standardHeight : standardWidth);
+                const auto = calcAutoScale(standardWidth);
                 if (hScale === null) hScale = auto;
                 if (vScale === null) vScale = auto;
             }
@@ -2908,33 +3268,34 @@
                         
                         let originalWidth = parseFloat(thumb.dataset.originalWidth);
                         let originalHeight = parseFloat(thumb.dataset.originalHeight);
+                        const isRotated90 = thumb.classList.contains('rotate-90') || thumb.classList.contains('rotate-270');
 
-                        if (originalWidth > standardWidth * 1.2 || originalHeight > standardHeight * 1.2) {
-                            const scale = Math.min(standardWidth / originalWidth, standardHeight / originalHeight);
-                            originalWidth *= scale;
-                            originalHeight *= scale;
+                        let effW = isRotated90 ? originalHeight : originalWidth;
+                        let effH = isRotated90 ? originalWidth : originalHeight;
+
+                        if (effW > standardWidth * 1.2 || effH > standardHeight * 1.2) {
+                            const scale = Math.min(standardWidth / effW, standardHeight / effH);
+                            effW *= scale;
+                            effH *= scale;
                         }
 
-                        const isRotated90 = thumb.classList.contains('rotate-90') || thumb.classList.contains('rotate-270');
-                        // Effective orientation after rotation
-                        const isCurrentlyVertical = isRotated90 ? (originalWidth > originalHeight) : (originalHeight > originalWidth);
+                        const isCurrentlyVertical = effH > effW;
                         const currentScale = isCurrentlyVertical ? vScale : hScale;
 
-                        const scaledWidth = originalWidth * currentScale;
-                        const scaledHeight = originalHeight * currentScale;
+                        const scaledWidth = effW * currentScale;
+                        const scaledHeight = effH * currentScale;
                         
-                        if (isRotated90) {
-                            wrapper.style.width = scaledHeight + 'px';
-                            wrapper.style.height = scaledWidth + 'px';
-                        } else {
-                            wrapper.style.width = scaledWidth + 'px';
-                            wrapper.style.height = scaledHeight + 'px';
-                        }
-                        
-                        thumb.style.width = scaledWidth + 'px';
-                        thumb.style.height = scaledHeight + 'px';
-                    });
+                        wrapper.style.width = scaledWidth + 'px';
+                        wrapper.style.height = scaledHeight + 'px';
 
+                        if (isRotated90) {
+                            thumb.style.width = scaledHeight + 'px';
+                            thumb.style.height = scaledWidth + 'px';
+                        } else {
+                            thumb.style.width = scaledWidth + 'px';
+                            thumb.style.height = scaledHeight + 'px';
+                        }
+                    });
                 }
             });
             updateRowNumbers();
@@ -3138,7 +3499,7 @@
                 '}',
                 '',
                 'function Process-Video {',
-                '    param([string]\$sourcePath, [string]\$targetPath, [array]\$cuts, [array]\$markers, [bool]\$flipped)',
+                '    param([string]\$sourcePath, [string]\$targetPath, [array]\$cuts, [array]\$markers, [bool]\$flipped, [string]\$crop)',
                 '    Write-Host "--- Processing Video: \$([System.IO.Path]::GetFileName(\$sourcePath)) ---" -ForegroundColor Cyan',
                 '    if (-not \$sourcePath -or -not (Test-Path -LiteralPath \$sourcePath)) { ',
                 '        Write-Host "Source path empty or invalid: \$sourcePath" -ForegroundColor Red',
@@ -3152,7 +3513,7 @@
                 '    \$duration = (ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 -i "\$sourcePath") -as [double]',
                 '    \$fps_raw = (ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i "\$sourcePath")',
                 '    \$fps = if (\$fps_raw.Contains("/")) { ',
-                '        \$parts = \$fps_raw -split "/"; [double]\$parts[0] / [double]\$parts[1]',
+                '        $parts = \$fps_raw -split "/"; [double]$parts[0] / [double]$parts[1]',
                 '    } else { [double]\$fps_raw }',
                 '    Write-Host "Duration: \$duration seconds, FPS: \$fps"',
                 '    ',
@@ -3217,8 +3578,7 @@
                 '    # Determine target dimensions',
                 '    \$hasRotation = \$false',
                 '    foreach (\$seg in \$segments) { if (\$seg.rotation -eq 90 -or \$seg.rotation -eq 270) { \$hasRotation = \$true; break } }',
-                '    \$targetW = if (\$hasRotation) { \$sh } else { \$sw }',
-                '    \$targetH = if (\$hasRotation) { \$sw } else { \$sh }',
+                '    if (\$crop) { \$p = \$crop -split ":"; \$targetW = [int]\$p[0]; \$targetH = [int]\$p[1]; if (\$hasRotation) { \$tmp = \$targetW; \$targetW = \$targetH; \$targetH = \$tmp } } else { \$targetW = if (\$hasRotation) { \$sh } else { \$sw }; \$targetH = if (\$hasRotation) { \$sw } else { \$sh } }',
                 '    \$targetW = [Math]::Ceiling(\$targetW / 2) * 2',
                 '    \$targetH = [Math]::Ceiling(\$targetH / 2) * 2',
                 '    ',
@@ -3236,11 +3596,12 @@
                 '        elseif (\$seg.rotation -eq 180) { \$transpose = ",transpose=1,transpose=1" }',
                 '        elseif (\$seg.rotation -eq 270) { \$transpose = ",transpose=2" }',
                 '        \$flip = if (\$flipped) { ",hflip" } else { "" }',
-                '        \$vFilters += "[0:v]trim=start_frame=\$startF:end_frame=\$endF,setpts=PTS-STARTPTS\$transpose\$flip,scale=w=\$targetW:h=\$targetH:force_original_aspect_ratio=decrease,pad=\$targetW:\$targetH:(ow-iw)/2:(oh-ih)/2,setsar=1[\$vName]"',
+                '        \$cropFilter = if (\$crop) { ",crop=\$crop" } else { "" }',
+                '        \$vFilters += "[0:v]trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS\$transpose\$flip\$cropFilter,scale=w=${targetW}:h=${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i]"',
                 '        if (\$hasAudio) {',
                 '            \$vStart = (\$seg.start).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
                 '            \$vEnd = (\$seg.end).ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)',
-                '            \$aFilters += "[0:a]atrim=start=\$vStart:end=\$vEnd,asetpts=PTS-STARTPTS[\$aName]"',
+                '            \$aFilters += "[0:a]atrim=start=${vStart}:end=${vEnd},asetpts=PTS-STARTPTS[a$i]"',
                 '        }',
                 '    }',
                 '    \$vConcat = (\$segments | ForEach-Object -Begin {\$idx=0} -Process {"[v\$idx]" ; \$idx++}) -join ""',
@@ -3249,11 +3610,11 @@
                 '    \$finalA = if (\$hasAudio) { "; \$aConcat concat=n=\$(\$segments.Count):v=0:a=1[a]" } else { "" }',
                 '    \$fullFilter = (\$vFilters + \$aFilters + \$finalV) -join "; "',
                 '    \$fullFilter += \$finalA',
-                '    \$fullFilter | Out-File -LiteralPath \$filterPath -Encoding utf8',
+                '    \$fullFilter | Out-File -LiteralPath \$filterPath -Encoding ASCII',
                 '    ',
                 '    Write-Host "  > Encoding with filter_complex..."',
                 '    \$mapArgs = if (\$hasAudio) { @("-map", "[v]", "-map", "[a]") } else { @("-map", "[v]") }',
-                '    ffmpeg -y -noautorotate -i "\$sourcePath" -filter_complex_script "\$filterPath" @mapArgs -c:v libx264 -crf 17 -preset veryslow -c:a aac -b:a 192k -metadata:s:v:0 rotate=0 -movflags +faststart "\$targetPath"',
+                '    ffmpeg -y -noautorotate -i "\$sourcePath" -filter_complex \"$(Get-Content -LiteralPath \$filterPath -Raw)\" @mapArgs -c:v libx264 -crf 17 -preset veryslow -c:a aac -b:a 192k -metadata:s:v:0 rotate=0 -movflags +faststart "\$targetPath"',
                 '    Remove-Item -LiteralPath "\$tempDir" -Recurse -Force',
                 '}',
                 '',
@@ -3298,18 +3659,18 @@
                 '}',
                 '',
                 'function Manage-Shortcut {',
-                '    param([string]\$folderPath, [string]\$videoName, [string]\$targetPath, [bool]\$shouldExist)',
+                '    param([string]\$folderPath, [string]\$videoName, [string]\$targetPath, [bool]$shouldExist)',
                 '    if (-not \$folderPath) { return }',
                 '    if (-not (Test-Path -LiteralPath \$folderPath)) {',
-                '        if (\$shouldExist) { [System.IO.Directory]::CreateDirectory(\$folderPath) | Out-Null }',
+                '        if ($shouldExist) { [System.IO.Directory]::CreateDirectory(\$folderPath) | Out-Null }',
                 '        else { return }',
                 '    }',
                 '    \$baseName = [System.IO.Path]::GetFileNameWithoutExtension(\$videoName)',
                 '    \$extensions = @(".lnk", ".ink")',
-                '    \$pattern = [regex]::Escape(\$baseName) + ".*" + "(\\.lnk|\\.ink)\$"',
-                '    \$existing = Get-ChildItem -LiteralPath \$folderPath -File | Where-Object { \$_.Name -match \$pattern }',
+                '    $pattern = [regex]::Escape(\$baseName) + ".*" + "(\\.lnk|\\.ink)\$"',
+                '    \$existing = Get-ChildItem -LiteralPath \$folderPath -File | Where-Object { \$_.Name -match $pattern }',
                 '    ',
-                '    if (-not \$shouldExist) {',
+                '    if (-not $shouldExist) {',
                 '        foreach (\$file in \$existing) {',
                 '            Remove-Item -LiteralPath \$file.FullName -Force',
                 '            Write-Host "Removed obsolete shortcut: \$(\$file.Name)" -ForegroundColor Yellow',
@@ -3317,17 +3678,17 @@
                 '        return',
                 '    }',
                 '    ',
-                '    \$primaryPath = (Join-Path -Path \$folderPath -ChildPath (\$videoName + ".lnk"))',
+                '    $primaryPath = (Join-Path -Path \$folderPath -ChildPath (\$videoName + ".lnk"))',
                 '    \$foundCorrect = \$false',
                 '    foreach (\$file in \$existing) {',
                 '        try {',
                 '            \$sc = \$wshell.CreateShortcut(\$file.FullName)',
                 '            if ([System.IO.Path]::GetFullPath(\$sc.TargetPath).TrimEnd(\"\\\") -eq \$targetPath.TrimEnd(\"\\\")) {',
                 '                if (-not \$foundCorrect) {',
-                '                    if (\$file.FullName -ne \$primaryPath) {',
-                '                        if (Test-Path -LiteralPath \$primaryPath) { Remove-Item -LiteralPath \$primaryPath -Force }',
-                '                        Move-Item -LiteralPath \$file.FullName -Destination \$primaryPath -Force',
-                '                        Write-Host "Standardized shortcut name: \$primaryPath" -ForegroundColor Gray',
+                '                    if (\$file.FullName -ne $primaryPath) {',
+                '                        if (Test-Path -LiteralPath $primaryPath) { Remove-Item -LiteralPath $primaryPath -Force }',
+                '                        Move-Item -LiteralPath \$file.FullName -Destination $primaryPath -Force',
+                '                        Write-Host "Standardized shortcut name: $primaryPath" -ForegroundColor Gray',
                 '                    }',
                 '                    \$foundCorrect = \$true',
                 '                } else {',
@@ -3344,13 +3705,13 @@
                 '    }',
                 '    if (-not \$foundCorrect) {',
                 '        try {',
-                '            if (Test-Path -LiteralPath \$primaryPath) { Remove-Item -LiteralPath \$primaryPath -Force }',
-                '            \$sc = \$wshell.CreateShortcut(\$primaryPath)',
+                '            if (Test-Path -LiteralPath $primaryPath) { Remove-Item -LiteralPath $primaryPath -Force }',
+                '            \$sc = \$wshell.CreateShortcut($primaryPath)',
                 '            \$sc.TargetPath = \$targetPath',
                 '            \$sc.Save()',
-                '            Write-Host "Created shortcut: \$primaryPath" -ForegroundColor Green',
+                '            Write-Host "Created shortcut: $primaryPath" -ForegroundColor Green',
                 '        } catch {',
-                '            Write-Host "FAILED to create shortcut: \$primaryPath" -ForegroundColor Red',
+                '            Write-Host "FAILED to create shortcut: $primaryPath" -ForegroundColor Red',
                 '        }',
                 '    }',
                 '}',
@@ -3372,8 +3733,8 @@
                     const targetRes = getPSPathRes('\$BaseDir', sel.targetProject, sel.targetProject, sel.subfolder);
                     scriptLines.push(`\$targetVideoPath = (Join-Path -Path (${targetRes}) -ChildPath '${escapedVideoName}')`);
                     
-                    scriptLines.push('if (Test-Path -LiteralPath \"$sourceVideoPath\") {');
-                    scriptLines.push('    Move-Item -LiteralPath \"$sourceVideoPath\" -Destination \"$targetVideoPath\" -Force');
+                    scriptLines.push('if (Test-Path -LiteralPath \"\\$sourceVideoPath\") {');
+                    scriptLines.push('    Move-Item -LiteralPath \"\\$sourceVideoPath\" -Destination \"$targetVideoPath\" -Force');
                     scriptLines.push(`    Write-Host "Moved video to: ${escapedTargetProjectPath || '(Root)'}\\${escapedVideoName}"`);
                     scriptLines.push('}');
                     
@@ -3390,7 +3751,7 @@
                     scriptLines.push(`    \$tgtDirPath = (Join-Path -Path \"$targetProjectPath\" -ChildPath \$dirName)`);
                     scriptLines.push(`    if (-not (Test-Path -LiteralPath \"\$tgtDirPath\")) { [System.IO.Directory]::CreateDirectory(\"\$tgtDirPath\") | Out-Null }`);
                     scriptLines.push(`    if (Test-Path -LiteralPath \"$srcDirPath\") {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$srcDirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | ForEach-Object { Move-Item -LiteralPath \"\$(\$_.FullName)\" -Destination \"$tgtDirPath\" -Force }`);
+                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$srcDirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | ForEach-Object { Move-Item -LiteralPath \"\$(\$_.FullName)\" -Destination \"$tgtDirPath\" -Force }`);
                     scriptLines.push(`        Write-Host "Moved thumbnails for ${escapedVideoName} to ${escapedTargetProjectPath}\\$dirName"`);
                     scriptLines.push(`    }`);
                     scriptLines.push(`}`);
@@ -3404,9 +3765,9 @@
                     scriptLines.push(`    if (-not (Test-Path -LiteralPath \"\$tgtScPath\")) { [System.IO.Directory]::CreateDirectory(\"\$tgtScPath\") | Out-Null }`);
                     scriptLines.push(`    \$tgtScFile = (Join-Path -Path \"$tgtScPath\" -ChildPath \$scFileName)`);
                     scriptLines.push(`    Move-Item -LiteralPath \"$srcScFile\" -Destination \"$tgtScFile\" -Force`);
-                    scriptLines.push(`    \$shortcut = \$wshell.CreateShortcut(\$tgtScFile)`);
-                    scriptLines.push(`    \$shortcut.TargetPath = \$targetVideoPath`);
-                    scriptLines.push(`    \$shortcut.Save()`);
+                    scriptLines.push(`    $shortcut = \$wshell.CreateShortcut(\$tgtScFile)`);
+                    scriptLines.push(`    $shortcut.TargetPath = \$targetVideoPath`);
+                    scriptLines.push(`    $shortcut.Save()`);
                     scriptLines.push(`    Write-Host "Moved and updated subfolder shortcut for ${escapedVideoName}"`);
                     scriptLines.push(`}`);
 
@@ -3414,9 +3775,9 @@
                     scriptLines.push(`\$rootScPath = (Join-Path -Path \"$BaseDir\" -ChildPath 'sc')`);
                     scriptLines.push(`\$rootScFile = (Join-Path -Path \"$rootScPath\" -ChildPath \$scFileName)`);
                     scriptLines.push(`if (Test-Path -LiteralPath \"$rootScFile\") {`);
-                    scriptLines.push(`    \$shortcut = \$wshell.CreateShortcut(\$rootScFile)`);
-                    scriptLines.push(`    \$shortcut.TargetPath = \$targetVideoPath`);
-                    scriptLines.push(`    \$shortcut.Save()`);
+                    scriptLines.push(`    $shortcut = \$wshell.CreateShortcut(\$rootScFile)`);
+                    scriptLines.push(`    $shortcut.TargetPath = \$targetVideoPath`);
+                    scriptLines.push(`    $shortcut.Save()`);
                     scriptLines.push(`    Write-Host "Updated root shortcut target for ${escapedVideoName}"`);
                     scriptLines.push(`}`);
                     
@@ -3484,7 +3845,7 @@
                 const editRotationChanged = sel.editRotation && sel.editRotation !== "0";
                 const editFlippedChanged = !!sel.editFlipped;
                 
-                const needsProcessing = (hasCuts || markersChanged || editRotationChanged || editFlippedChanged) && sel.editModeRotated;
+                const needsProcessing = (hasCuts || markersChanged || editRotationChanged || editFlippedChanged || sel.crop) && sel.editModeRotated;
 
                 const rotationChanged = sel.rotation !== initialRot;
                 const flippedChanged = !!sel.flipped !== initialFlipped;
@@ -3493,10 +3854,11 @@
                 const selectionType = sel.type;
 
                 // Prior edits that aren't being re-processed this session
-                if (!sel.editModeRotated && (hasCuts || markersChanged || editRotationChanged || editFlippedChanged)) {
+                if (!sel.editModeRotated && (hasCuts || markersChanged || editRotationChanged || editFlippedChanged || sel.crop)) {
                     let priorDesc = `${sel.videoName} (`;
                     if (sel.editRotation && sel.editRotation !== "0") priorDesc += `Rot ${sel.editRotation}°, `;
                     if (sel.editFlipped) priorDesc += "Flip, ";
+                    if (sel.crop) priorDesc += `Crop ${sel.crop}, `;
                     if (sel.cuts && sel.cuts.length > 0) priorDesc += `${sel.cuts.length} Cuts, `;
                     priorDesc = priorDesc.replace(/, $/, ")").replace(/\($/, "");
                     summaryActions.prior_edits.push(priorDesc);
@@ -3516,13 +3878,14 @@
                     let editDesc = `${sel.videoName} (`;
                     if (sel.editRotation && sel.editRotation !== "0") editDesc += `Rotate ${sel.editRotation}°, `;
                     if (sel.editFlipped) editDesc += "H-Flip, ";
+                    if (sel.crop) editDesc += `Crop ${sel.crop}, `;
                     if (sel.cuts && sel.cuts.length > 0) editDesc += `${sel.cuts.length} Cuts, `;
                     editDesc = editDesc.replace(/, $/, ")").replace(/\($/, "");
                     summaryActions.edits.push(editDesc);
 
                     scriptLines.push(`    # Processing edits for: ${sel.projectPath}\\${sel.videoName} (New session edits)`);
-                    const projToUse = isMoved ? sel.targetProject : sel.projectPath;
-                    const nameToUse = isMoved ? sel.targetProject : sel.projectName;
+                    const projToUse = sel.projectPath;
+                    const nameToUse = sel.projectName;
                     const res = getPSPathRes('\$BaseDir', projToUse, nameToUse, sel.subfolder);
                     scriptLines.push(`    \$sourceVideoPath = (Join-Path -Path (${res}) -ChildPath '${escapedVideoName}')`);
                     
@@ -3543,12 +3906,13 @@
                         scriptLines.push(`    \$markers += @{ time = 0; rotation = ${rotNum} }`);
                     }
 
-                    scriptLines.push(`    \$processedVideoPath = (Join-Path -Path (Split-Path -Parent \$sourceVideoPath) -ChildPath ('processed_' + '${escapedVideoName}'))`);
+                    scriptLines.push(`    \\$processedVideoPath = (Join-Path -Path (Split-Path -Parent \$sourceVideoPath) -ChildPath ('processed_' + '${escapedVideoName}'))`);
                     const isFlipped = sel.editFlipped ? '\$true' : '\$false';
-                    scriptLines.push(`    Process-Video -sourcePath \$sourceVideoPath -targetPath \$processedVideoPath -cuts \$cuts -markers \$markers -flipped ${isFlipped}`);
-                    scriptLines.push(`    if (Test-Path -LiteralPath \"$processedVideoPath\") {`);
-                    scriptLines.push(`        if (Test-Path -LiteralPath \"$sourceVideoPath\") { Remove-Item -LiteralPath \"$sourceVideoPath\" -Force }`);
-                    scriptLines.push(`        Move-Item -LiteralPath \"$processedVideoPath\" -Destination \"$sourceVideoPath\" -Force`);
+                    const cropArg = sel.crop ? `'${escapePSString(sel.crop)}'` : '\$null';
+                    scriptLines.push(`    Process-Video -sourcePath \$sourceVideoPath -targetPath \\$processedVideoPath -cuts \$cuts -markers \$markers -flipped ${isFlipped} -crop ${cropArg}`);
+                    scriptLines.push(`    if (Test-Path -LiteralPath \"\$processedVideoPath\") {`);
+                    scriptLines.push(`        if (Test-Path -LiteralPath \"\\$sourceVideoPath\") { Remove-Item -LiteralPath \"\\$sourceVideoPath\" -Force }`);
+                    scriptLines.push(`        Move-Item -LiteralPath \"\$processedVideoPath\" -Destination \"\\$sourceVideoPath\" -Force`);
                     scriptLines.push(`        Write-Host "Applied edits to: ${escapedVideoName}"`);
                     scriptLines.push(`    }`);
                 }
@@ -3559,15 +3923,18 @@
                 let targetPathConstruction = `(Join-Path -Path (${targetBaseRes}) -ChildPath '${escapedVideoName}')`;
 
                 if (sel.deleteEditThumbnails) {
-                    summaryActions.thumb_cleanup.push(`${sel.videoName}: Delete Edit Thumbnails`);
+                    summaryActions.thumb_cleanup.push(`${sel.videoName}: Delete Thumbnails`);
                     const thumbBase = sel.videoName.substring(0, sel.videoName.lastIndexOf('.'));
                     const escapedThumbBase = escapePSString(thumbBase);
                     const projRes = getPSPathRes('\$BaseDir', sel.projectPath, sel.projectName, '');
-                    scriptLines.push(`    # Deleting Edit Thumbnails for: ${sel.videoName}`);
-                    scriptLines.push(`    \$editThumbDir = (Join-Path -Path ${projRes} -ChildPath 'Edit Thumbnails')`);
-                    scriptLines.push(`    if (Test-Path -LiteralPath \$editThumbDir) {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \$editThumbDir | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | Remove-Item -Force`);
-                    scriptLines.push(`        Write-Host "Deleted edit thumbnails for: ${escapedVideoName}"`);
+                    scriptLines.push(`    # Deleting Thumbnails for: ${sel.videoName}`);
+                    scriptLines.push(`    \$thumbDirs = @('Thumbnails', 'Edit Thumbnails')`);
+                    scriptLines.push(`    foreach (\$dirName in \$thumbDirs) {`);
+                    scriptLines.push(`        \$dirPath = (Join-Path -Path ${projRes} -ChildPath \$dirName)`);
+                    scriptLines.push(`        if (Test-Path -LiteralPath \$dirPath) {`);
+                    scriptLines.push(`            Get-ChildItem -LiteralPath \$dirPath | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | Remove-Item -Force`);
+                    scriptLines.push(`            Write-Host "Deleted thumbnails in \$dirName for: ${escapedVideoName}"`);
+                    scriptLines.push(`        }`);
                     scriptLines.push(`    }`);
                 }
 
@@ -3642,18 +4009,18 @@
                     const escapedThumbBase = escapePSString(thumbBase);
                     
                     const projRes = getPSPathRes('\$BaseDir', sel.projectPath, sel.projectName, '');
-                    scriptLines.push(`\$projectPath = ${projRes}`);
+                    scriptLines.push(`$projectPath = ${projRes}`);
                     scriptLines.push(`\$thumbDirs = @('Thumbnails', 'Edit Thumbnails')`);
                     scriptLines.push(`foreach (\$dirName in \$thumbDirs) {`);
-                    scriptLines.push(`    \$dirPath = (Join-Path -Path \"$projectPath\" -ChildPath \$dirName)`);
+                    scriptLines.push(`    \$dirPath = (Join-Path -Path \"\$projectPath\" -ChildPath \$dirName)`);
                     scriptLines.push(`    if (Test-Path -LiteralPath \"$dirPath\") {`);
-                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$dirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' } | Remove-Item -Force`);
+                    scriptLines.push(`        Get-ChildItem -LiteralPath \"$dirPath\" | Where-Object { \$_.Name -like '${escapedThumbBase}_*' -or \$_.BaseName -eq '${escapedThumbBase}' } | Remove-Item -Force`);
                     scriptLines.push(`        Write-Host "Deleted thumbnails for ${escapedVideoName} in \$dirName"`);
                     scriptLines.push(`    }`);
                     scriptLines.push(`}`);
 
                     // Also remove any existing shortcuts for this deleted file
-                    scriptLines.push(`\$subfolderScPath = (Join-Path -Path \$projectPath -ChildPath 'sc')`);
+                    scriptLines.push(`\$subfolderScPath = (Join-Path -Path $projectPath -ChildPath 'sc')`);
                     scriptLines.push(`Manage-Shortcut -folderPath \$rootScFolder -videoName '${escapedVideoName}' -targetPath '' -shouldExist \$false`);
                     scriptLines.push(`Manage-Shortcut -folderPath \$subfolderScPath -videoName '${escapedVideoName}' -targetPath '' -shouldExist \$false`);
 
@@ -3787,13 +4154,16 @@
                 if (sel && sel.editModeRotated) {
                     if (hasSessionRotation) dataParts.push('edit_rotated:true');
                     if (hasSessionCuts) dataParts.push('has_cuts:true');
-                    if (!hasSessionRotation && !hasSessionCuts && hasSessionOther) dataParts.push('edit_rotated:true');
+                    if (sel.crop) dataParts.push(`crop:${sel.crop}`);
+                    if (!hasSessionRotation && !hasSessionCuts && hasSessionOther && !sel.crop) dataParts.push('edit_rotated:true');
                 } else if (hasLoadedEdit) {
                     // Restore loaded flags if not overwritten by a session commit
                     const existing = editModeRotatedVideos.get(key);
                     if (typeof existing === 'string') {
                         if (existing.includes('edit_rot:') || existing.includes('edit_rotated:true')) dataParts.push('edit_rotated:true');
                         if (existing.includes('cuts:') || existing.includes('has_cuts:true')) dataParts.push('has_cuts:true');
+                        const cMatch = existing.match(/crop:([^|]+)/);
+                        if (cMatch) dataParts.push(`crop:${cMatch[1]}`);
                     } else {
                         dataParts.push('edit_rotated:true');
                     }
@@ -3855,8 +4225,8 @@
                     const projectPathVar = `(${getPSPathRes('\$BaseDir', projectPath, projectName, '')})`;
 
                     scriptLines.push(`Write-Host "Placing genuine timestamp for project: ${projectPath || projectName || '(Root)'}"`);
-                    scriptLines.push(`\$projectFolder = ${projectPathVar}`);
-                    scriptLines.push(`\$scDateFile = (Join-Path -Path \"$projectFolder\" -ChildPath 'scdate.txt')`);
+                    scriptLines.push(`$projectFolder = ${projectPathVar}`);
+                    scriptLines.push(`\$scDateFile = (Join-Path -Path \"\$projectFolder\" -ChildPath 'scdate.txt')`);
                     scriptLines.push(`Set-Content -LiteralPath \"$scDateFile\" -Value "${timestamp}"`);
                     scriptLines.push('');
                 });
@@ -3869,8 +4239,8 @@
                     const projectPathVar = `(${getPSPathRes('\$BaseDir', projectPath, projectName, '')})`;
 
                     scriptLines.push(`Write-Host "Placing dummy timestamp for project: ${projectPath || projectName || '(Root)'}"`);
-                    scriptLines.push(`\$projectFolder = ${projectPathVar}`);
-                    scriptLines.push(`\$scDateFile = (Join-Path -Path \"$projectFolder\" -ChildPath 'scdate.txt')`);
+                    scriptLines.push(`$projectFolder = ${projectPathVar}`);
+                    scriptLines.push(`\$scDateFile = (Join-Path -Path \"\$projectFolder\" -ChildPath 'scdate.txt')`);
                     scriptLines.push(`Set-Content -LiteralPath \"$scDateFile\" -Value "dummy:${timestamp}"`);
                     scriptLines.push('');
                 });
@@ -3990,6 +4360,9 @@
                                 if (part.startsWith('cuts:') || part === 'has_cuts:true') {
                                     sel.loadedHasCuts = true;
                                 }
+                if (part.startsWith('crop:')) {
+                    sel.crop = part.substring(5);
+                }
                             }
                         });
                     }
@@ -4514,6 +4887,16 @@
                         thumbnailsContainer.className = 'thumbnails-container';
                         rowDiv.appendChild(thumbnailsContainer);
 
+                        thumbnailsContainer.addEventListener('click', (e) => {
+                            if (e.target === thumbnailsContainer) {
+                                const key = project.path + '|' + videoFile.name;
+                                const selection = shortcutSelections.get(key);
+                                const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
+                                const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                            }
+                        });
+
                         let initialShortcutType = '';
                         if (rootScEntry && typeof rootScEntry === 'string') {
                             if (rootScEntry === 'BOTH') initialShortcutType = 'both-sc';
@@ -4589,7 +4972,7 @@
                             const selection = shortcutSelections.get(key);
                             const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
                             const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                            playVideo(videoFile, activeRotation, activeFlipped);
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                         });
 
                             const url = URL.createObjectURL(file);
@@ -4746,6 +5129,26 @@
                             thumbnailsContainer.className = 'thumbnails-container';
                             rowDiv.appendChild(thumbnailsContainer);
 
+                            thumbnailsContainer.addEventListener('click', async (e) => {
+                                if (e.target === thumbnailsContainer) {
+                                    if (!videoFile) {
+                                        for await (const entry of subfolderHandle.values()) {
+                                            if (entry.kind === 'file' && entry.name.startsWith(videoBaseName)) {
+                                                videoFile = await entry.getFile();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (videoFile) {
+                                        const key = subfolderName + '|' + videoBaseName;
+                                        const selection = shortcutSelections.get(key);
+                                        const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
+                                        const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                        playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                                    }
+                                }
+                            });
+
                             canvasElements.push(rowDiv);
                             updateRowUI(rowDiv, videoBaseName, subfolderName);
 
@@ -4789,7 +5192,7 @@
                                         const selection = shortcutSelections.get(key);
                                         const activeRotation = (selection && selection.rotation) ? selection.rotation : rotation;
                                         const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                                        playVideo(videoFile, activeRotation, activeFlipped);
+                                        playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                                     }
                                 });
 
@@ -5042,6 +5445,14 @@
                         thumbnailsContainer.innerHTML = '';
                         const key = project.path + '|Playlist Item';
                         let selection = shortcutSelections.get(key);
+
+                            thumbnailsContainer.onclick = (e) => {
+                                if (e.target === thumbnailsContainer) {
+                                    const activeRotation = (selection && selection.rotation) ? selection.rotation : "0";
+                                    const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
+                                    playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
+                                }
+                            };
                         if (selection) {
                             selection.videoName = video.name;
                             selection.subfolder = video.subfolder;
@@ -5067,7 +5478,7 @@
                                 e.stopPropagation();
                                 const activeRotation = (selection && selection.rotation) ? selection.rotation : "0";
                                 const activeFlipped = (selection && selection.flipped) ? selection.flipped : false;
-                                playVideo(videoFile, activeRotation, activeFlipped);
+                                playVideo(videoFile, activeRotation, activeFlipped, rowDiv);
                             });
 
                             const url = URL.createObjectURL(file);
@@ -5153,15 +5564,15 @@
                 '\$rootScFolder = [System.IO.Path]::GetFullPath(\$rootScFolder)',
                 '',
                 'function Add-PlaylistEntry {',
-                '    param([string]\$path, [string]\$rotation, [int]\$multiplier, [string]\$rotationKey)',
-                '    \$fullPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath \$path))',
+                '    param([string]$path, [string]\$rotation, [int]\$multiplier, [string]\$rotationKey)',
+                '    \$fullPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath $path))',
                 '    \$key = if (\$rotationKey) { \$rotationKey } else { [System.IO.Path]::GetFileName(\$fullPath) }',
                 '    if (\$script:addedTargets.Add(\$fullPath)) {',
                 '        if (\$rotation -and \$rotation -ne "0") {',
                 '            \$script:rotatedFiles[\$key] = \$rotation',
                 '        }',
                 '        for (\$i = 0; \$i -lt \$multiplier; \$i++) {',
-                '            \$script:playlistContent.Add(\$path)',
+                '            \$script:playlistContent.Add($path)',
                 '        }',
                 '    } elseif (\$rotation -and \$rotation -ne "0") {',
                 '        \$rotationVal = if (\$rotation -match "^(\\d+)") { \$matches[1] } else { "0" }',
@@ -5170,9 +5581,9 @@
                 '}',
                 '',
                 'function Get-RotationDataMap {',
-                '    param([string]\$projectPath)',
+                '    param([string]$projectPath)',
                 '    \$map = @{}',
-                '    \$rotFile = (Join-Path -Path "\$projectPath" -ChildPath "rotation_data.txt")',
+                '    \$rotFile = (Join-Path -Path "$projectPath" -ChildPath "rotation_data.txt")',
                 '    if (Test-Path -LiteralPath "\$rotFile") {',
                 '        Get-Content -LiteralPath "\$rotFile" | ForEach-Object {',
                 '            if (\$_ -match "^(.*?):(.*)\$") {',
@@ -5184,23 +5595,23 @@
                 '}',
                 '',
                 'function Verify-Shortcuts {',
-                '    param([array]\$shortcutPaths)',
-                '    if (-not \$shortcutPaths) { return }',
+                '    param([array]$shortcutPaths)',
+                '    if (-not $shortcutPaths) { return }',
                 '    Write-Host "`n--- Verifying Touched Shortcuts ---" -ForegroundColor Cyan',
-                '    foreach (\$path in \$shortcutPaths) {',
-                '        if (Test-Path -LiteralPath \$path) {',
+                '    foreach ($path in $shortcutPaths) {',
+                '        if (Test-Path -LiteralPath $path) {',
                 '            try {',
-                '                \$target = \$wshell.CreateShortcut(\$path).TargetPath',
+                '                \$target = \$wshell.CreateShortcut($path).TargetPath',
                 '                if (-not (Test-Path -LiteralPath \$target)) {',
-                '                    Write-Host "BROKEN: \$path -> \$target" -ForegroundColor Red',
+                '                    Write-Host "BROKEN: $path -> \$target" -ForegroundColor Red',
                 '                } else {',
-                '                    Write-Host "VALID:  \$([System.IO.Path]::GetFileName(\$path))" -ForegroundColor Green',
+                '                    Write-Host "VALID:  \$([System.IO.Path]::GetFileName($path))" -ForegroundColor Green',
                 '                }',
                 '            } catch {',
-                '                Write-Host "ERROR verifying \$([System.IO.Path]::GetFileName(\$path)): \$(\$_.Exception.Message)" -ForegroundColor Yellow',
+                '                Write-Host "ERROR verifying \$([System.IO.Path]::GetFileName($path)): \$(\$_.Exception.Message)" -ForegroundColor Yellow',
                 '            }',
                 '        } else {',
-                '            Write-Host "MISSING: \$path" -ForegroundColor Red',
+                '            Write-Host "MISSING: $path" -ForegroundColor Red',
                 '        }',
                 '    }',
                 '}',
@@ -5220,12 +5631,12 @@
             if (!isPlaylistRootMode) {
                 scriptLines.push(
                     'function Get-ShortcutTarget {',
-                    '    param([string]\$path)',
+                    '    param([string]$path)',
                     '    try {',
-                    '        \$shortcut = \$wshell.CreateShortcut(\$path)',
-                    '        \$target = \$shortcut.TargetPath',
+                    '        $shortcut = \$wshell.CreateShortcut($path)',
+                    '        \$target = $shortcut.TargetPath',
                     '        if (-not [System.IO.Path]::IsPathRooted(\$target)) {',
-                    '            \$target = [System.IO.Path]::GetFullPath((Join-Path -Path (Split-Path -Parent \$path) -ChildPath \$target))',
+                    '            \$target = [System.IO.Path]::GetFullPath((Join-Path -Path (Split-Path -Parent $path) -ChildPath \$target))',
                     '        } else {',
                     '            \$target = [System.IO.Path]::GetFullPath(\$target)',
                     '        }',
@@ -5289,19 +5700,19 @@
 
                 scriptLines.push('if (Test-Path -LiteralPath \"$rootScFolder\") {');
                 scriptLines.push('    \$rotationCache = @{}');
-                scriptLines.push('    \$shortcuts = Get-ChildItem -LiteralPath \"$rootScFolder\" -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' }');
-                scriptLines.push('    foreach (\$shortcutFile in \$shortcuts) {');
-                scriptLines.push('        \$targetPath = Get-ShortcutTarget \$shortcutFile.FullName');
+                scriptLines.push('    $shortcuts = Get-ChildItem -LiteralPath \"$rootScFolder\" -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' }');
+                scriptLines.push('    foreach ($shortcutFile in $shortcuts) {');
+                scriptLines.push('        \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('        if (-not \$targetPath) { continue }');
-                scriptLines.push('        foreach (\$projPath in \$rootSelections.Keys) {');
-                scriptLines.push('            if (\$targetPath.StartsWith(\$projPath + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or \$targetPath -eq \$projPath) {');
-                scriptLines.push('                if (-not \$rotationCache.ContainsKey(\$projPath)) { \$rotationCache[\$projPath] = Get-RotationDataMap \$projPath }');
-                scriptLines.push('                \$rotationMap = \$rotationCache[\$projPath]');
+                scriptLines.push('        foreach ($projPath in \$rootSelections.Keys) {');
+                scriptLines.push('            if (\$targetPath.StartsWith($projPath + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or \$targetPath -eq $projPath) {');
+                scriptLines.push('                if (-not \$rotationCache.ContainsKey($projPath)) { \$rotationCache[$projPath] = Get-RotationDataMap $projPath }');
+                scriptLines.push('                \$rotationMap = \$rotationCache[$projPath]');
                 scriptLines.push('                \$videoName = [System.IO.Path]::GetFileName(\$targetPath).ToLower()');
                 scriptLines.push('                \$rotation = if (\$rotationMap.ContainsKey(\$videoName)) { \$rotationMap[\$videoName] } else { "0" }');
-                scriptLines.push('                \$multiplier = \$rootSelections[\$projPath]');
+                scriptLines.push('                \$multiplier = \$rootSelections[$projPath]');
                 scriptLines.push('                Add-PlaylistEntry -path \$targetPath -rotation \$rotation -multiplier \$multiplier');
-                scriptLines.push('                Write-Host "Added to playlist (root): \$(\$shortcutFile.Name) (\$multiplier x, Rotation: \$rotation)"');
+                scriptLines.push('                Write-Host "Added to playlist (root): \$($shortcutFile.Name) (\$multiplier x, Rotation: \$rotation)"');
                 scriptLines.push('                break');
                 scriptLines.push('            }');
                 scriptLines.push('        }');
@@ -5323,27 +5734,27 @@
                     scriptLines.push(`\$subfolderSelections['' + [System.IO.Path]::GetFullPath((${projectPathVar}))] = ${multiplier}`);
                 });
 
-                scriptLines.push('foreach (\$projPath in \$subfolderSelections.Keys) {');
-                scriptLines.push('    if (Test-Path -LiteralPath \"$projPath\") {');
-                scriptLines.push('        \$multiplier = \$subfolderSelections[\$projPath]');
-                scriptLines.push('        \$rotationMap = Get-RotationDataMap \$projPath');
-                scriptLines.push('        \$projectShortcuts = Get-ChildItem -LiteralPath \"$projPath\" -Recurse -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' -and -not \$_.FullName.StartsWith(\$rootScFolder + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) }');
-                scriptLines.push('        foreach (\$shortcutFile in \$projectShortcuts) {');
-                scriptLines.push('            \$targetPath = Get-ShortcutTarget \$shortcutFile.FullName');
+                scriptLines.push('foreach ($projPath in \$subfolderSelections.Keys) {');
+                scriptLines.push('    if (Test-Path -LiteralPath \"\$projPath\") {');
+                scriptLines.push('        \$multiplier = \$subfolderSelections[$projPath]');
+                scriptLines.push('        \$rotationMap = Get-RotationDataMap $projPath');
+                scriptLines.push('        $projectShortcuts = Get-ChildItem -LiteralPath \"\$projPath\" -Recurse -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' -and -not \$_.FullName.StartsWith(\$rootScFolder + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) }');
+                scriptLines.push('        foreach ($shortcutFile in $projectShortcuts) {');
+                scriptLines.push('            \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('            if (-not \$targetPath) { continue }');
                 scriptLines.push('            \$videoName = [System.IO.Path]::GetFileName(\$targetPath).ToLower()');
                 scriptLines.push('            \$rotation = if (\$rotationMap.ContainsKey(\$videoName)) { \$rotationMap[\$videoName] } else { "0" }');
                 scriptLines.push('            Add-PlaylistEntry -path \$targetPath -rotation \$rotation -multiplier \$multiplier');
-                scriptLines.push('            Write-Host "Added to playlist (subfolder): \$(\$shortcutFile.Name) (\$multiplier x, Rotation: \$rotation)"');
+                scriptLines.push('            Write-Host "Added to playlist (subfolder): \$($shortcutFile.Name) (\$multiplier x, Rotation: \$rotation)"');
                 scriptLines.push('        }');
                 scriptLines.push('    }');
                 scriptLines.push('}');
                 scriptLines.push('');
             }
 
-            scriptLines.push('\$playlistPath = (Join-Path -Path \"$BaseDir\" -ChildPath "playlist.m3u")');
-            scriptLines.push('\$script:playlistContent | Out-File -LiteralPath \"$playlistPath\" -Encoding utf8');
-            scriptLines.push('Write-Host "Playlist created at: \$playlistPath"');
+            scriptLines.push('$playlistPath = (Join-Path -Path \"$BaseDir\" -ChildPath "playlist.m3u")');
+            scriptLines.push('\$script:playlistContent | Out-File -LiteralPath \"\$playlistPath\" -Encoding utf8');
+            scriptLines.push('Write-Host "Playlist created at: $playlistPath"');
 
             scriptLines.push("\$luaPath = 'C:\\Bridge\\misc\\tools\\mpv-x86_64-v3-20260418-git-4377cce\\portable_config\\scripts\\autorotate.lua'");
             scriptLines.push('\$allRotations = @{}');

@@ -1,0 +1,36 @@
+# Code Audit Report for sc5.html
+
+## 1. Structural & Architectural Issues
+* **Global Scope Pollution**: Nearly all variables and functions are defined in the global script scope. This increases the risk of name collisions as the project grows.
+* **Large Monolithic Functions**: Functions like `layoutLandscapeThumbnails` and `openVideoEditor` are quite large and perform multiple responsibilities (logic, UI updates, state management).
+* **Duplicate Event Listeners**: Multiple `window.addEventListener('mouseup', ...)` and `window.addEventListener('mousemove', ...)` are registered for different features (Panel resizing, Editor scrubbing, Cropping).
+    * *Impact*: While functional, it makes event management harder to track and can lead to multiple handlers firing for the same event unnecessarily.
+
+## 2. Logical & Functional Observations
+* **Panel Resizing Performance**: During panel resizing, `layoutLandscapeThumbnails()` is called on every `mousemove`.
+    * *Impact*: For large projects with many thumbnails, this can cause visible lag or high CPU usage.
+* **Naming Inconsistency**:
+    * Variable naming is inconsistent across functions: `isRot90` vs `isRotated90`.
+    * Some functions use `camelCase` (e.g., `updateRowUI`) while others use `PascalCase` or mixed styles in the generated PowerShell (e.g., `Resolve-PSPath`).
+* **Nested Function Declarations**: `openVideoEditor` contains a nested `async function scanForFile`.
+    * *Impact*: This function is redefined every time the editor is opened. It should be moved to the outer scope for better performance and clarity.
+* **Hardcoded Layout Constants**: Values like `210` (minimum thumbnail width), `50`/`20` (padding), and `320`/`180` (standard dimensions) are hardcoded.
+    * *Impact*: Changing the design requires searching through logic code rather than adjusting a configuration object or CSS variables.
+
+## 3. PowerShell Script Generation
+* **Encoding Workaround**: The script uses `ASCII` encoding for the FFmpeg filter file to avoid Byte Order Mark (BOM) issues with PowerShell's default UTF-8.
+    * *Observation*: While this works for most cases, it might fail if a file path contains non-ASCII characters. A better approach would be UTF-8 without BOM if supported by the environment.
+* **Complexity of String Escaping**: The generated PowerShell script relies heavily on complex string escaping (`\$`, `${var}`) which is prone to errors during maintenance.
+
+## 4. CSS & Styling
+* **Inline Styles**: Many UI elements (especially in the editor and category panel) use inline styles applied via JavaScript.
+    * *Impact*: Harder to theme or override using CSS.
+* **Z-Index Management**: Z-indexes are scattered throughout the code (e.g., `z-index: 10`, `1000`, `2000`).
+    * *Impact*: Can lead to "z-index wars" where elements overlap unexpectedly.
+
+## 5. Potential Edge Cases
+* **Empty States**: Some UI components (like the action summary) have basic error/empty handling, but others might fail if data is missing or malformed (e.g., `allThumbs` being empty in `layoutLandscapeThumbnails`).
+* **Browser Compatibility**: The use of `requestVideoFrameCallback` is modern and efficient but might require fallbacks for older browser versions.
+
+## Summary
+The code is functional and feature-rich, but would benefit from modularization (splitting the large HTML file into modules), unifying event management, and extracting configuration constants into a centralized object.
