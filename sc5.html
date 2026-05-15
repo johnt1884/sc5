@@ -1098,7 +1098,7 @@
         const categoriesPanel = document.getElementById('categories-panel');
         const panelResizer = document.getElementById('panel-resizer');
         const panelContent = document.getElementById('panel-content');
-        let lastUsedMoveTarget = null;
+        let lastUsedMoveTarget = localStorage.getItem("lastUsedMoveTarget");
 
         function updateRowNumbers() {
             const showNumbers = showNumbersCheckbox.checked;
@@ -2889,16 +2889,25 @@
 
             const moveSelector = rowDiv.querySelector(".move-to-selector");
             if (moveSelector) {
-                moveSelector.value = (selection && selection.targetProject) || "";
-                moveSelector.classList.toggle("active", !!(selection && selection.targetProject));
+                const target = (selection && selection.targetProject) || "";
+                if (target && moveSelector.options.length <= 1) {
+                    allProjectFolders.forEach(proj => {
+                        if (proj.path !== projectPath) {
+                            const opt = document.createElement("option");
+                            opt.value = proj.path;
+                            opt.textContent = proj.name;
+                            moveSelector.appendChild(opt);
+                        }
+                    });
+                }
+                moveSelector.value = target;
+                moveSelector.classList.toggle("active", !!target);
             }
             debouncedLayout();
         }
-
         function createRowActionBar(videoName, projectPath, subfolder, rowDiv, projectName) {
             const bar = document.createElement("div"); bar.className = "row-action-bar";
             const leftGroup = document.createElement("div");
-            leftGroup.className = 'row-action-group-left';
 
             const createBtn = (text, onClick, type = null, color = null) => {
                 const btn = document.createElement('button');
@@ -3019,7 +3028,7 @@
                     selection = { videoName, projectPath, subfolder, projectName, type: '', rotation: "0" };
                     shortcutSelections.set(key, selection);
                 }
-                selection.targetProject = targetPath; if (targetPath) { lastUsedMoveTarget = targetPath; document.querySelectorAll(".quick-move-btn").forEach(btn => btn.disabled = false); } updateRowUI(rowDiv, videoName, projectPath);
+                selection.targetProject = targetPath; if (targetPath) { lastUsedMoveTarget = targetPath; localStorage.setItem("lastUsedMoveTarget", targetPath); document.querySelectorAll(".quick-move-btn").forEach(btn => btn.disabled = false); } updateRowUI(rowDiv, videoName, projectPath);
             };
 
             const quickMoveBtn = document.createElement("button");
